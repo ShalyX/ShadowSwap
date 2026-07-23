@@ -1,0 +1,30 @@
+{
+  "name": "@shadowswap/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.ts --network hardhat",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "settle:solo": "hardhat run scripts/settle-solo.ts --network sepolia",
+    "solver": "hardhat run scripts/solver-bot.ts --network sepolia",
+    "clean": "hardhat clean"
+  },
+  "dependencies": {
+    "@iexec-nox/handle": "0.1.0-beta.13",
+    "@iexec-nox/nox-confidential-contracts": "^0.2.2",
+    "@iexec-nox/nox-protocol-contracts": "^0.2.4",
+    "@openzeppelin/contracts": "^5.6.1",
+    "encrypted-types": "^0.0.4"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.3",
+    "@types/node": "^22.15.0",
+    "dotenv": "^16.5.0",
+    "hardhat": "^3.11.0",
+    "typescript": "^5.8.3",
+    "viem": "^2.31.0"
+  }
+}

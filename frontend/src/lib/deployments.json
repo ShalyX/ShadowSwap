@@ -1,0 +1,30 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployedAt": "2026-07-23T07:12:39.221Z",
+  "deployer": "0x709f18f797347fbb8d53fb60567892751dd14b11",
+  "explorer": "https://sepolia.etherscan.io",
+  "contracts": {
+    "sUSD": "0x71400310565117185560fcdd4859000d411eff47",
+    "sETH": "0xb3789acad5d8fa7cedb4e857e8824c6db441cf33",
+    "cSUSD": "0x452f01f61957b49002010e3e0c1eda97492144a8",
+    "cSETH": "0x22e9a2e8d98528e53ab5478f6c8d7f4cbf69fe01",
+    "simpleAMM": "0x738f55c7b8faa9038c1fe04583cf716ad277f5bd",
+    "intentBook": "0x4d357b92698cf6868e8fb04bad22797f2031764e",
+    "executor": "0x607c7cedd4ac5b88e15048dab7c42c5b994b848d",
+    "faucet": "0x04b0d89ae9971705e326a2b277e1d039bcef3631",
+    "noxCompute": "0x24Ef36Ec5b626D7DCD09a98F3083c2758F0F77bF",
+    "uniswapV2Router02Sepolia": "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3"
+  },
+  "config": {
+    "batchWindowSeconds": 300,
+    "faucetAmounts": {
+      "sUSD": "1000000000",
+      "sETH": "1000000000000000000"
+    },
+    "seedLiquidity": {
+      "sUSD": "100000000000",
+      "sETH": "50000000000000000000"
+    }
+  }
+}

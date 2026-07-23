@@ -1,0 +1,294 @@
+:root {
+  --bg: #05060A; /* Deep Midnight */
+  --bg-elevated: rgba(255, 255, 255, 0.02);
+  --bg-card: rgba(12, 15, 26, 0.4);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  
+  --text: #ffffff;
+  --muted: #9ba3b5;
+  
+  --aurora-start: #00E5FF; /* Deep Teal */
+  --aurora-mid: #4facfe;
+  --aurora-end: #b388eb; /* Soft Amethyst */
+  
+  --danger: #ff477e;
+  --success: #00f5d4;
+  --radius: 16px;
+  
+  --gradient-aurora: linear-gradient(135deg, var(--aurora-start), var(--aurora-end));
+  --gradient-glow: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(179, 136, 235, 0.2));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* Background Ambient Orbs */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: -1;
+  opacity: 0.15;
+  pointer-events: none;
+  animation: float 20s ease-in-out infinite alternate;
+}
+
+body::before {
+  background: radial-gradient(circle, var(--aurora-start), transparent 60%);
+  top: -20%;
+  left: -10%;
+}
+
+body::after {
+  background: radial-gradient(circle, var(--aurora-end), transparent 60%);
+  bottom: -20%;
+  right: -10%;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(5%, 10%) scale(1.1); }
+}
+
+a {
+  color: var(--aurora-start);
+  text-decoration: none;
+  transition: opacity 0.3s ease;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+.container {
+  width: min(1120px, calc(100% - 3rem));
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--bg-card);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.08),
+    0 10px 40px rgba(0,0,0,0.5);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card:hover {
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.12),
+    0 15px 50px rgba(0,0,0,0.6);
+}
+
+.btn {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0.85rem 1.25rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn:not(:disabled):hover {
+  transform: scale(1.02);
+}
+
+.btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--gradient-aurora);
+  color: #05060A;
+  box-shadow: 0 4px 20px var(--gradient-glow);
+}
+
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(255,255,255,0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.btn-primary:not(:disabled):hover::before {
+  opacity: 1;
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.btn-ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-strong);
+}
+
+.btn-danger {
+  background: rgba(255, 71, 126, 0.1);
+  border: 1px solid rgba(255, 71, 126, 0.3);
+  color: var(--danger);
+}
+
+.input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  padding: 0.85rem 1.25rem;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.input:focus {
+  border-color: var(--aurora-start);
+  box-shadow: 
+    inset 0 2px 5px rgba(0,0,0,0.2),
+    0 0 0 3px rgba(0, 229, 255, 0.15);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.input::placeholder {
+  color: rgba(255,255,255,0.2);
+}
+
+.label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(8px);
+}
+
+.badge-live {
+  color: var(--aurora-start);
+  border-color: rgba(0, 229, 255, 0.3);
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.1);
+}
+
+.mono {
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.95em;
+  letter-spacing: -0.02em;
+}
+
+.text-gradient {
+  background: var(--gradient-aurora);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: inline-block;
+}
+
+/* Shimmer Animation for Encryption */
+.shimmer-input {
+  position: relative;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.6);
+  color: transparent !important; /* Hide real text */
+}
+
+.shimmer-input::before {
+  content: "ENCRYPTING...";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  color: var(--aurora-end);
+  z-index: 2;
+}
+
+.shimmer-input::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+  z-index: 1;
+}
+
+@keyframes shimmer {
+  100% {
+    left: 200%;
+  }
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 900px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
