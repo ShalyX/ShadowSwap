@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { NetworkGuard } from "@/components/NetworkGuard";
 import { SwapDesk } from "@/components/SwapDesk";
 import { BatchDesk } from "@/components/BatchDesk";
+import { UnwrapDesk } from "@/components/UnwrapDesk";
 
 export default function TradePage() {
   return (
@@ -19,7 +20,10 @@ export default function TradePage() {
       </div>
 
       <div className="grid-2" style={{ alignItems: "start" }}>
-        <SwapDesk />
+        <div>
+          <SwapDesk />
+          <UnwrapDesk />
+        </div>
         <BatchDesk />
       </div>
     </main>

@@ -452,6 +452,28 @@ export const erc7984Abi = [
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "unwrap",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "from", type: "address" },
+      { name: "amount", type: "bytes32" },
+      { name: "inputProof", type: "bytes" }
+    ],
+    outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "finalizeUnwrap",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "unwrapRequestId", type: "bytes32" },
+      { name: "decryptedAmountAndProof", type: "bytes" }
+    ],
+    outputs: []
   }
 ] as const;
 
