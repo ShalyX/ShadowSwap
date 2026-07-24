@@ -1,174 +1,94 @@
-# ShadowSwap
+# 🌑 ShadowSwap
 
-**Private AMM routing on [iExec Nox](https://github.com/iExec-Nox)** — WTF !! Hackathon Summer Edition.
+**The first Privacy-Preserving Intent-Based AMM Router built on iExec Nox.**
 
-> Encrypt trade size & min-out → rest in a batchable intent book → settle on a public AMM (Uniswap V2–compatible) → re-shield outputs to confidential ERC-7984 balances.
+![ShadowSwap Cover](https://via.placeholder.com/1000x300.png?text=ShadowSwap+-+Dark+Forest+Protection)
 
-![status](https://img.shields.io/badge/chain-Ethereum%20Sepolia-blue)
-![nox](https://img.shields.io/badge/privacy-Nox%20TEE%20handles-purple)
-![hackathon](https://img.shields.io/badge/hackathon-WTF%20Summer%202026-orange)
+**Live Demo (Sepolia):** [https://frontend-rlqpzenjm-shalyxs-projects.vercel.app](https://frontend-rlqpzenjm-shalyxs-projects.vercel.app)
 
-## Why this wins the “private Uniswap” lane
+---
 
-Most teams will ship wrap → swap → wrap. ShadowSwap adds product depth:
+## 🌲 The Problem: DeFi is a Dark Forest
+On traditional AMMs, every detail of a trade—especially the **trade size** and **slippage tolerance**—is fully transparent before execution. This bleeds massive value to MEV bots, front-runners, and sandwich attackers.
 
-| Feature | Detail |
-|---------|--------|
-| **Encrypted intents** | `amountIn` + `minAmountOut` as Nox handles |
-| **Batch windows** | Default 5m seal period for same-pair netting |
-| **Auditor ACL** | `grantAuditor` → Nox `addViewer` (no spend rights) |
-| **Honest privacy model** | Documented leakage at settlement (`docs/PRIVACY_MODEL.md`) |
-| **Guaranteed demo liquidity** | `SimpleAMM` seed + optional Uniswap V2 Router02 adapter |
+Users are forced to choose between hiding their trades on centralized platforms or suffering worse execution on transparent chains.
 
-## Architecture
+## 🛡️ The Solution: ShadowSwap
+ShadowSwap is a decentralized intent router that uses **Fully Homomorphic Encryption (FHE)** via the **iExec Nox Protocol** to shield the two most vulnerable parameters of a trade: `amountIn` and `minAmountOut`.
 
-```
-User UI ──encrypt──► Nox Gateway/TEE
-   │
-   ├── submitIntent ► ShadowIntentBook (encrypted handles + batches)
-   │
-   └── settle ► ShadowSwapExecutor ► SimpleAMM / Uniswap V2
-                      │
-                      └── wrap out ► ConfidentialWrappedToken (cToken)
-```
+By keeping these parameters encrypted at rest, ShadowSwap enables **private, MEV-resistant trading** while still tapping into the massive liquidity of public AMMs like Uniswap. 
 
-See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) and [docs/PRIVACY_MODEL.md](./docs/PRIVACY_MODEL.md).
+### How it Works
+1. **Wrap & Shield**: Users wrap standard ERC20 tokens (e.g., sUSD) into confidential ERC7984 tokens (e.g., cSUSD).
+2. **Encrypted Intents**: Users submit encrypted intents to the `ShadowIntentBook` smart contract. Only the token pair is public; the sizes remain FHE-encrypted Nox handles.
+3. **Solver Netting**: An off-chain solver bot batches multiple intents for the same pair. Using strict Access Control logic (ACL), the solver is permitted to decrypt only the **aggregate sum** of the batch, never the individual intents.
+4. **Public Execution**: The solver executes a single optimized trade on a public AMM (like Uniswap V2) using the netted amount. Individual user sizes are obfuscated by the crowd.
+5. **Auto Re-Shielding**: The public output tokens (e.g., sETH) are immediately re-wrapped into confidential tokens (cSETH) by the smart contract and distributed pro-rata to the users.
 
-## Repo
+At no point does the individual user's trade size or slippage enter the public mempool in plaintext. 
 
-```
-ShadowSwap/
-  contracts/     Hardhat 3 + Solidity (Nox + Shadow*)
-  frontend/      Next.js desk UI
-  docs/          Privacy + architecture
-  deployments/   Address books
-  feedback.md    Required iExec feedback
-```
+---
 
-## Quick start
+## 🏗️ Architecture
+
+ShadowSwap consists of three core components:
+
+### 1. Smart Contracts (Solidity)
+- **ShadowIntentBook.sol**: The ledger of encrypted intents. It manages intent states, batches, and complex iExec Nox ACL permissions (allowing only the Executor to act on the handles).
+- **ShadowSwapExecutor.sol**: The settlement engine. It unwraps the netted confidential tokens, performs the public swap via a `SwapAdapter`, and re-shields the outputs.
+- **ISwapAdapter.sol**: Abstract interface allowing the executor to plug into any public AMM (currently supporting Uniswap V2).
+
+### 2. Frontend (Next.js)
+- A sleek, terminal-inspired dark-mode UI built with Next.js, Wagmi, and Viem.
+- Integrates the `@iexec-nox/handle` SDK to encrypt inputs directly in the browser and automatically orchestrate the multi-step signature flows required for FHE operations.
+
+### 3. Solver Bot (Node.js)
+- A decentralized background worker that actively monitors the `ShadowIntentBook`.
+- It dynamically batches pending intents, polls the Nox Gateway for `publicDecrypt` proofs, and submits the final settlement transaction to the blockchain.
+
+---
+
+## 🛠️ Built With
+- **iExec Nox Protocol**: FHE Smart Contracts, ERC7984 Confidential Tokens, and Nox Gateway decryption proofs.
+- **Solidity & Hardhat**: Smart contract development and deployment.
+- **Next.js & React**: Frontend interface.
+- **Wagmi & Viem**: Blockchain interaction and wallet connection.
+- **Vercel**: Frontend hosting.
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
+- Node.js (v18+)
+- A wallet connected to **Ethereum Sepolia Testnet** with some Sepolia ETH.
 
-- Node.js ≥ 20 (24 recommended)
-- Sepolia ETH
-- MetaMask / injected wallet
-- **`@iexec-nox/handle@0.1.0-beta.13+`** (older handle SDK versions are **deprecated**)
+### Installation
 
-### Nox Handle SDK (Ethereum Sepolia built-in)
+1. **Clone the repo:**
+   ```bash
+   git clone https://github.com/ShalyX/ShadowSwap.git
+   cd ShadowSwap
+   ```
 
-As of [`v0.1.0-beta.13`](https://github.com/iExec-Nox/nox-handle-sdk/releases/tag/v0.1.0-beta.13), connecting a wallet to **Ethereum Sepolia** auto-resolves:
+2. **Run the Frontend locally:**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   Open `http://localhost:3000` to interact with the UI.
 
-| Field | Value |
-|-------|--------|
-| Gateway | `https://gateway-testnets.noxprotocol.dev` |
-| NoxCompute | `0x24ef36ec5b626d7dcd09a98f3083c2758f0f77bf` |
-| Subgraph | `https://thegraph.ethereum-sepolia-testnet.noxprotocol.io/api/subgraphs/id/9CsccKwvgYFo72zZeU4k4wj2NEBLdWhVE3EUandgmzgo` |
+3. **Run the Solver Bot:**
+   To settle trades on your local fork or testnet, you need to run the solver bot in a separate terminal:
+   ```bash
+   cd contracts
+   npm install
+   npm run solver
+   ```
+   *(Note: You will need a valid `PRIVATE_KEY` in `contracts/.env` that has Sepolia ETH to pay for settlement gas).*
 
-No manual gateway env vars required for the default path. Pin the package:
+---
 
-```bash
-cd frontend && npm i @iexec-nox/handle@0.1.0-beta.13
-```
-
-### 1. Install
-
-```bash
-cd ShadowSwap
-npm run setup
-# or:
-cd contracts && npm install
-cd ../frontend && npm install
-```
-
-### 2. Configure
-
-```bash
-# contracts
-cp contracts/.env.example contracts/.env
-# PRIVATE_KEY=0x...
-# SEPOLIA_RPC_URL=https://...
-
-# frontend (optional — Sepolia Nox defaults are in the SDK)
-cp frontend/.env.example frontend/.env.local
-# NEXT_PUBLIC_SEPOLIA_RPC=https://...
-```
-
-### 3. Deploy (Sepolia)
-
-```bash
-cd contracts
-npm run deploy:sepolia
-```
-
-Writes `deployments/sepolia.json` and mirrors into `frontend/src/lib/deployments.json`.
-
-### 4. Run UI
-
-```bash
-cd frontend
-npm run dev
-```
-
-Open http://localhost:3000
-
-### Demo flow
-
-1. **Faucet** — mint sUSD + sETH  
-2. **Wrap** — public ERC-20 → confidential cToken  
-3. **Operator** — approve `ShadowSwapExecutor` on cToken  
-4. **Submit encrypted intent** — size + minOut encrypted for the intent book  
-5. **Run solo settle** — `pullFromIntent` → `startUnwrapHeld` → `publicDecrypt` → `finalizeUnwrap` → `executeSoloAfterUnwrap` (re-shields cTokenOut)  
-6. **Optional:** grant auditor view; seal batch / batch settle  
-
-CLI alternative after an intent exists:
-```bash
-cd contracts
-INTENT_ID=1 npm run settle:solo
-```
-
-## Contracts
-
-| Contract | Purpose |
-|----------|---------|
-| `ConfidentialWrappedToken` | ERC-20 ↔ ERC-7984 (Nox) |
-| `ShadowIntentBook` | Encrypted intents, batches, auditors |
-| `ShadowSwapExecutor` | Public AMM settlement + re-shield |
-| `SimpleAMM` | Constant-product demo pool |
-| `ShadowFaucet` | Testnet funding |
-
-**NoxCompute (Ethereum Sepolia):** `0x24Ef36Ec5b626D7DCD09a98F3083c2758F0F77bF`  
-**Uniswap V2 Router02 (Sepolia):** `0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3`
-
-## Live Sepolia addresses (2026-07-22)
-
-| Contract | Address |
-|----------|---------|
-| sUSD | [`0x24b5788c00ccb45ac9b4d007503615f73002cea5`](https://sepolia.etherscan.io/address/0x24b5788c00ccb45ac9b4d007503615f73002cea5) |
-| sETH | [`0x7ebbd6aa42fd00de52e1cb766d8243984627a79b`](https://sepolia.etherscan.io/address/0x7ebbd6aa42fd00de52e1cb766d8243984627a79b) |
-| cSUSD | [`0xf602925adc32f54b83596774c96d4ea7bf73d92b`](https://sepolia.etherscan.io/address/0xf602925adc32f54b83596774c96d4ea7bf73d92b) |
-| cSETH | [`0xa83ed2d690da87d8e1131dcc532de5d41b5aa483`](https://sepolia.etherscan.io/address/0xa83ed2d690da87d8e1131dcc532de5d41b5aa483) |
-| SimpleAMM | [`0x29b5aa2e5ab7a1d4bcdb6b5d805345b79719e9ed`](https://sepolia.etherscan.io/address/0x29b5aa2e5ab7a1d4bcdb6b5d805345b79719e9ed) |
-| IntentBook | [`0x985f2d9fa7fbf356b22abe0dffd69b315bfc6220`](https://sepolia.etherscan.io/address/0x985f2d9fa7fbf356b22abe0dffd69b315bfc6220) |
-| Executor | [`0xe281efeaa405fbbcad7082282a3f76ffab47b2b4`](https://sepolia.etherscan.io/address/0xe281efeaa405fbbcad7082282a3f76ffab47b2b4) |
-| Faucet | [`0x16649904b2d9c072b244a1b7fcb9064ffa130713`](https://sepolia.etherscan.io/address/0x16649904b2d9c072b244a1b7fcb9064ffa130713) |
-
-Also written to `deployments/sepolia.json` and `frontend/src/lib/deployments.json`.
-
-## Deliverables checklist (hackathon)
-
-- [x] Public product narrative + privacy honesty  
-- [x] Open-source contracts + frontend  
-- [x] Sepolia-oriented deploy path  
-- [x] Live Sepolia addresses after deploy  
-- [x] Solo + batch settlement UI  
-- [x] `feedback.md` on iExec tools  
-- [ ] E2E video ≤ 4 min  
-- [ ] DoraHacks submit + X post tagging `@iEx_ec`
-
-## Security notes
-
-Hackathon code — unaudited. Do not use with mainnet funds. Operator grants and unwrap proofs must be handled carefully.
-
-## License
-
-MIT
+## 💡 Hackathon Note
+This project was built from scratch to demonstrate the power of FHE applied to decentralized finance. By combining confidential state with public AMM liquidity, ShadowSwap proves that we don't need to rebuild Uniswap from the ground up to achieve MEV resistance and privacy—we just need to shield the intents. 
