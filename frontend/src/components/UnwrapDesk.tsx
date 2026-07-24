@@ -39,7 +39,7 @@ export function UnwrapDesk() {
       setStatus("2/3 Requesting unwrap on-chain...");
       
       // We simulate first to get the returned unwrapRequestId
-      const { result: unwrapRequestId, request } = await publicClient.simulateContract({
+      const { request } = await publicClient.simulateContract({
         address: cTokenOut,
         abi: erc7984Abi,
         functionName: "unwrap",
@@ -53,9 +53,30 @@ export function UnwrapDesk() {
 
       setStatus("3/3 Decrypting unwrap request via Nox Gateway...");
       
+      // Extract unwrapRequestId from the UnwrapRequested event in the receipt
+      let unwrapRequestId: `0x${string}` | null = null;
+      for (const log of receipt.logs) {
+        // We look for the UnwrapRequested event signature or just decode the logs
+        try {
+          // Decode log using publicClient or viem decodeEventLog if needed,
+          // but we can just use publicClient if we want. Wait, we can import decodeEventLog.
+          // Or just slice the data. The 'amount' is unindexed, so it's in log.data!
+          if (log.address.toLowerCase() === cTokenOut.toLowerCase() && log.data !== "0x") {
+             // Assuming UnwrapRequested is the only event with 1 unindexed bytes32,
+             // or we just take log.data if it's 32 bytes (66 chars).
+             // Actually, it's safer to just grab it. log.data is exactly 32 bytes for euint256 amount.
+             if (log.data.length === 66) {
+                unwrapRequestId = log.data as `0x${string}`;
+             }
+          }
+        } catch (err) {}
+      }
+      
+      if (!unwrapRequestId) throw new Error("Could not find unwrapRequestId in transaction logs");
+
       // Decrypt the unwrapRequestId to get the proof
       let decryptionProof: `0x${string}` | null = null;
-      for (let attempt = 1; attempt <= 10; attempt++) {
+      for (let attempt = 1; attempt <= 15; attempt++) {
         try {
           const res = await publicDecryptHandle(walletClient, unwrapRequestId);
           decryptionProof = res.proof;
