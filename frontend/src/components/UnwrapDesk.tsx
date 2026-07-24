@@ -79,7 +79,7 @@ export function UnwrapDesk() {
       for (let attempt = 1; attempt <= 15; attempt++) {
         try {
           const res = await publicDecryptHandle(walletClient, unwrapRequestId);
-          decryptionProof = res.proof;
+          decryptionProof = res.decryptionProof;
           break;
         } catch (err: any) {
           if (attempt === 10) throw err;
