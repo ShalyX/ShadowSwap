@@ -1,5 +1,5 @@
 import { NetworkGuard } from "@/components/NetworkGuard";
-import { PiggyPlayground } from "@/components/PiggyPlayground";
+import { NoxPlayground } from "@/components/NoxPlayground";
 
 export default function PiggyPage() {
   return (
@@ -13,7 +13,7 @@ export default function PiggyPage() {
       </div>
 
       <NetworkGuard>
-        <PiggyPlayground />
+        <NoxPlayground />
       </NetworkGuard>
     </main>
   );
