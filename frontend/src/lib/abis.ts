@@ -477,3 +477,40 @@ export const erc7984Abi = [
   }
 ] as const;
 
+export const piggyBankAbi = [
+  {
+    type: "function",
+    name: "balance",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "deposit",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "inputHandle", type: "bytes32" },
+      { name: "inputProof", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "inputHandle", type: "bytes32" },
+      { name: "inputProof", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
+
