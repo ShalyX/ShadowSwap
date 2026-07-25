@@ -2,9 +2,7 @@
 
 **The first Privacy-Preserving Intent-Based AMM Router built on iExec Nox.**
 
-![ShadowSwap Cover](https://via.placeholder.com/1000x300.png?text=ShadowSwap+-+Dark+Forest+Protection)
-
-**Live Demo (Sepolia):** [https://frontend-rlqpzenjm-shalyxs-projects.vercel.app](https://frontend-rlqpzenjm-shalyxs-projects.vercel.app)
+**Live Demo (Sepolia):** [https://shadowswap-app.vercel.app](https://shadowswap-app.vercel.app)
 
 ---
 
@@ -17,6 +15,12 @@ Users are forced to choose between hiding their trades on centralized platforms 
 ShadowSwap is a decentralized intent router that uses **Fully Homomorphic Encryption (FHE)** via the **iExec Nox Protocol** to shield the two most vulnerable parameters of a trade: `amountIn` and `minAmountOut`.
 
 By keeping these parameters encrypted at rest, ShadowSwap enables **private, MEV-resistant trading** while still tapping into the massive liquidity of public AMMs like Uniswap. 
+
+### 🌟 Key Differentiating Features
+* **🛡️ MEV & Sandwich Protection Shield**: Live visual estimator calculating real dollar MEV savings vs public DEX mempools.
+* **🏛️ Institutional Auditor Selective Disclosure**: Nox TEE Access Control (`Nox.allow(handle, auditor)`) allowing traders to grant read-only view keys to compliance auditors without revealing trade sizes to the public mempool.
+* **🔄 Bi-Directional Swaps**: Native support for two-way confidential swaps (`sUSD ↔ sETH`).
+* **📊 Real-Time Market Pricing**: Integrated live CoinGecko & CoinCap price feeds for dynamic market-aligned slippage calculation.
 
 ### How it Works
 1. **Wrap & Shield**: Users wrap standard ERC20 tokens (e.g., sUSD) into confidential ERC7984 tokens (e.g., cSUSD).
