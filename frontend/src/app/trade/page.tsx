@@ -1,11 +1,14 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { NetworkGuard } from "@/components/NetworkGuard";
 import { SwapDesk } from "@/components/SwapDesk";
 import { BatchDesk } from "@/components/BatchDesk";
 import { UnwrapDesk } from "@/components/UnwrapDesk";
+import { PrivacyPanel } from "@/components/PrivacyPanel";
 
 export default function TradePage() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -62,12 +65,18 @@ export default function TradePage() {
             <SwapDesk />
             <UnwrapDesk />
           </div>
-          <BatchDesk />
+          <div>
+            <BatchDesk />
+            <PrivacyPanel />
+          </div>
         </div>
       ) : (
-        <div style={{ maxWidth: "680px", margin: "0 auto" }}>
-          <SwapDesk />
-          <UnwrapDesk />
+        <div className="grid-2" style={{ alignItems: "start" }}>
+          <div>
+            <SwapDesk />
+            <UnwrapDesk />
+          </div>
+          <PrivacyPanel />
         </div>
       )}
     </main>

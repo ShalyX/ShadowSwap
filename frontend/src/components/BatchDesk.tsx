@@ -18,6 +18,7 @@ import {
   type BatchSettleStep,
   type IntentClearAmounts,
 } from "@/lib/settleBatch";
+import { formatError } from "@/lib/errors";
 
 const STEP_LABEL: Record<BatchSettleStep, string> = {
   idle: "Idle",
@@ -118,7 +119,7 @@ export function BatchDesk() {
           (data.isExecuted ? " · executed" : "")
       );
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setStatus(formatError(e));
     } finally {
       setBusy(false);
     }
@@ -138,7 +139,7 @@ export function BatchDesk() {
       await refetchBatchId();
       await loadPreview();
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setStatus(formatError(e));
     } finally {
       setBusy(false);
     }
@@ -197,7 +198,7 @@ export function BatchDesk() {
       setSettle(final);
       await loadPreview();
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setStatus(formatError(e));
     } finally {
       setBusy(false);
     }

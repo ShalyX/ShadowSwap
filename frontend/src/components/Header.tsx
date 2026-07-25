@@ -14,7 +14,7 @@ import deployments from "@/lib/deployments.json";
 
 export function Header() {
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
+  const { connectAsync, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const pathname = usePathname();
@@ -33,10 +33,14 @@ export function Header() {
   const onTarget = isConnected && isTargetChain(chainId);
   const wrongNetwork = isConnected && chainId != null && !isTargetChain(chainId);
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     const connector = connectors[0];
     if (!connector) return;
-    connect({ connector, chainId: TARGET_CHAIN_ID });
+    try {
+      await connectAsync({ connector });
+    } catch (e) {
+      console.warn("Wallet connect notice:", e);
+    }
   };
 
   const handleSwitch = () => {
@@ -150,7 +154,7 @@ export function Header() {
             <span className="badge badge-live" style={{ marginRight: "0.5rem" }}>● {TARGET_CHAIN_LABEL}</span>
             <button
               className="btn btn-primary"
-              disabled={isPending || !connectors[0]}
+              disabled={isPending}
               onClick={handleConnect}
             >
               {isPending ? "Connecting…" : "Connect Wallet"}

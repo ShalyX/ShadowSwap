@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWalletClient, usePublicClient, useWriteContract } from "wagmi";
-import { parseUnits, isAddress, Address } from "viem";
+import { useAccount, useWalletClient, usePublicClient, useWriteContract, useReadContract } from "wagmi";
+import { parseUnits, formatUnits, isAddress, Address } from "viem";
 import deployments from "@/lib/deployments.json";
 import { erc7984Abi } from "@/lib/abis";
-import { encryptAmount, publicDecryptHandle } from "@/lib/nox";
+import { encryptAmount, decryptHandle, publicDecryptHandle } from "@/lib/nox";
+import { formatError } from "@/lib/errors";
 
 export function UnwrapDesk() {
   const { address, isConnected } = useAccount();
@@ -20,7 +21,46 @@ export function UnwrapDesk() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Decrypted Balance State
+  const [decryptedCSETH, setDecryptedCSETH] = useState<string | null>(null);
+  const [decryptingBal, setDecryptingBal] = useState(false);
+
   const cTokenOut = contracts.cSETH as Address;
+
+  // Read Confidential Balance Handle for cSETH
+  const { data: cSETHHandle, refetch: refetchHandle } = useReadContract({
+    address: cTokenOut,
+    abi: erc7984Abi,
+    functionName: "confidentialBalanceOf",
+    args: [address as Address],
+    query: { enabled: !!address && !!ready }
+  });
+
+  const handleDecryptBalance = async () => {
+    if (!walletClient || !cSETHHandle || cSETHHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") {
+      setDecryptedCSETH("0.0000");
+      return;
+    }
+    setDecryptingBal(true);
+    try {
+      // Decrypt using Nox SDK
+      const res = await decryptHandle(walletClient, cSETHHandle as `0x${string}`);
+      const formatted = formatUnits(BigInt(res.value), 18);
+      setDecryptedCSETH(formatted);
+    } catch (e: any) {
+      console.warn("Standard decrypt failed, trying publicDecrypt fallback...", e);
+      try {
+        const pubRes = await publicDecryptHandle(walletClient, cSETHHandle as `0x${string}`);
+        const formatted = formatUnits(BigInt(pubRes.value), 18);
+        setDecryptedCSETH(formatted);
+      } catch (err) {
+        console.error(err);
+        setStatus("Could not decrypt cSETH balance: " + formatError(err));
+      }
+    } finally {
+      setDecryptingBal(false);
+    }
+  };
 
   const handleUnwrap = async () => {
     if (!walletClient || !publicClient || !address) return;
@@ -33,12 +73,9 @@ export function UnwrapDesk() {
       const amountBig = parseUnits(amount, 18);
       
       setStatus("1/3 Encrypting amount to unwrap...");
-      // For ERC7984 unwrap, the encrypted amount must be tied to the cToken
       const encAmount = await encryptAmount(walletClient, amountBig, cTokenOut);
 
       setStatus("2/3 Requesting unwrap on-chain...");
-      
-      // We simulate first to get the returned unwrapRequestId
       const { request } = await publicClient.simulateContract({
         address: cTokenOut,
         abi: erc7984Abi,
@@ -52,29 +89,19 @@ export function UnwrapDesk() {
       if (receipt.status !== "success") throw new Error("Transaction reverted");
 
       setStatus("3/3 Decrypting unwrap request via Nox Gateway...");
-      
-      // Extract unwrapRequestId from the UnwrapRequested event in the receipt
       let unwrapRequestId: `0x${string}` | null = null;
       for (const log of receipt.logs) {
-        // We look for the UnwrapRequested event signature or just decode the logs
         try {
-          // Decode log using publicClient or viem decodeEventLog if needed,
-          // but we can just use publicClient if we want. Wait, we can import decodeEventLog.
-          // Or just slice the data. The 'amount' is unindexed, so it's in log.data!
           if (log.address.toLowerCase() === cTokenOut.toLowerCase() && log.data !== "0x") {
-             // Assuming UnwrapRequested is the only event with 1 unindexed bytes32,
-             // or we just take log.data if it's 32 bytes (66 chars).
-             // Actually, it's safer to just grab it. log.data is exactly 32 bytes for euint256 amount.
              if (log.data.length === 66) {
                 unwrapRequestId = log.data as `0x${string}`;
              }
           }
-        } catch (err) {}
+        } catch {}
       }
       
       if (!unwrapRequestId) throw new Error("Could not find unwrapRequestId in transaction logs");
 
-      // Decrypt the unwrapRequestId to get the proof
       let decryptionProof: `0x${string}` | null = null;
       for (let attempt = 1; attempt <= 15; attempt++) {
         try {
@@ -102,9 +129,11 @@ export function UnwrapDesk() {
 
       setStatus("Unwrap successful! You received public sETH.");
       setAmount("");
+      setDecryptedCSETH(null);
+      refetchHandle();
     } catch (e) {
       console.error(e);
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setStatus(formatError(e));
     } finally {
       setBusy(false);
     }
@@ -112,14 +141,49 @@ export function UnwrapDesk() {
 
   return (
     <div className="card" style={{ padding: "1.75rem", marginTop: "1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--accent)" }}>Manage Balances</h2>
         <span className="badge">Unwrap cSETH</span>
       </div>
 
+      {/* Confidential Balance Box */}
+      <div style={{ padding: "0.85rem 1rem", background: "var(--bg-elevated)", borderRadius: "12px", border: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: "0.8rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+              Confidential cSETH Balance
+            </div>
+            <div className="mono" style={{ fontSize: "1.2rem", fontWeight: "bold", marginTop: "0.2rem", color: decryptedCSETH !== null ? "var(--aurora-start)" : "var(--text)" }}>
+              {decryptedCSETH !== null ? `${Number(decryptedCSETH).toFixed(4)} cSETH` : "🔒 Encrypted"}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleDecryptBalance}
+            disabled={!isConnected || decryptingBal}
+            style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem", border: "1px solid var(--border)" }}
+          >
+            {decryptingBal ? "Decrypting..." : decryptedCSETH !== null ? "↻ Refresh" : "🔓 Reveal Balance"}
+          </button>
+        </div>
+      </div>
+
       <div style={{ display: "grid", gap: "1rem" }}>
         <div>
-          <label className="label">Amount to Unwrap (cSETH)</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+            <label className="label" style={{ margin: 0 }}>Amount to Unwrap (cSETH)</label>
+            {decryptedCSETH !== null && Number(decryptedCSETH) > 0 && (
+              <button
+                type="button"
+                onClick={() => setAmount(decryptedCSETH)}
+                style={{ background: "none", border: "none", color: "var(--aurora-start)", fontSize: "0.78rem", cursor: "pointer", fontWeight: 600 }}
+              >
+                Use Max ({Number(decryptedCSETH).toFixed(4)})
+              </button>
+            )}
+          </div>
           <div style={{ position: "relative" }}>
             <input
               type="number"
@@ -148,7 +212,7 @@ export function UnwrapDesk() {
         </button>
 
         {status && (
-          <div className="mono" style={{ padding: "0.75rem", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: "0.85rem", color: status.startsWith("Error") ? "var(--danger)" : "var(--muted)" }}>
+          <div className="mono" style={{ padding: "0.75rem", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: "0.85rem", color: status.startsWith("Error") ? "var(--danger)" : "var(--muted)", wordBreak: "break-word" }}>
             {status}
           </div>
         )}
