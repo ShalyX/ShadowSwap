@@ -7,6 +7,7 @@ import deployments from "@/lib/deployments.json";
 import { erc7984Abi } from "@/lib/abis";
 import { encryptAmount, decryptHandle, publicDecryptHandle } from "@/lib/nox";
 import { formatError } from "@/lib/errors";
+import { LockIcon } from "@/components/Icons";
 
 export function UnwrapDesk() {
   const { address, isConnected } = useAccount();
@@ -142,7 +143,9 @@ export function UnwrapDesk() {
   return (
     <div className="card" style={{ padding: "1.75rem", marginTop: "1rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-        <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--accent)" }}>Manage Balances</h2>
+        <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <LockIcon size={18} /> Manage Balances
+        </h2>
         <span className="badge">Unwrap cSETH</span>
       </div>
 
@@ -153,8 +156,14 @@ export function UnwrapDesk() {
             <div style={{ fontSize: "0.8rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
               Confidential cSETH Balance
             </div>
-            <div className="mono" style={{ fontSize: "1.2rem", fontWeight: "bold", marginTop: "0.2rem", color: decryptedCSETH !== null ? "var(--aurora-start)" : "var(--text)" }}>
-              {decryptedCSETH !== null ? `${Number(decryptedCSETH).toFixed(4)} cSETH` : "🔒 Encrypted"}
+            <div className="mono" style={{ fontSize: "1.2rem", fontWeight: "bold", marginTop: "0.2rem", color: decryptedCSETH !== null ? "var(--aurora-start)" : "var(--text)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              {decryptedCSETH !== null ? (
+                `${Number(decryptedCSETH).toFixed(4)} cSETH`
+              ) : (
+                <>
+                  <LockIcon size={16} color="var(--aurora-start)" /> Encrypted Nox Handle
+                </>
+              )}
             </div>
           </div>
 
@@ -163,9 +172,9 @@ export function UnwrapDesk() {
             className="btn btn-ghost"
             onClick={handleDecryptBalance}
             disabled={!isConnected || decryptingBal}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem", border: "1px solid var(--border)" }}
+            style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem", border: "1px solid var(--border)", gap: "0.4rem" }}
           >
-            {decryptingBal ? "Decrypting..." : decryptedCSETH !== null ? "↻ Refresh" : "🔓 Reveal Balance"}
+            <LockIcon size={12} /> {decryptingBal ? "Decrypting..." : decryptedCSETH !== null ? "↻ Refresh" : "Reveal Balance"}
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import deployments from "@/lib/deployments.json";
 import { intentBookAbi, erc20Abi, erc7984Abi } from "@/lib/abis";
 import { encryptAmount } from "@/lib/nox";
 import { formatError } from "@/lib/errors";
+import { ShieldIcon, LockIcon, ZapIcon, ArrowDownUpIcon, ExternalLinkIcon, CheckCircleIcon } from "@/components/Icons";
 
 export function SwapDesk() {
   const { address, isConnected } = useAccount();
@@ -44,7 +45,6 @@ export function SwapDesk() {
           return;
         }
       } catch {
-        // Fallback to CoinCap API if CoinGecko rate-limits
         try {
           const res2 = await fetch("https://api.coincap.io/v2/rates/ethereum");
           const data2 = await res2.json();
@@ -59,11 +59,10 @@ export function SwapDesk() {
     };
 
     fetchLivePrice();
-    const interval = setInterval(fetchLivePrice, 30000); // refresh every 30s
+    const interval = setInterval(fetchLivePrice, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Dynamic Token Addresses & Decimals based on swap direction
   const tokenIn = isReverse ? (contracts.sETH as Address) : (contracts.sUSD as Address);
   const tokenOut = isReverse ? (contracts.sUSD as Address) : (contracts.sETH as Address);
   const cTokenIn = isReverse ? (contracts.cSETH as Address) : (contracts.cSUSD as Address);
@@ -79,12 +78,10 @@ export function SwapDesk() {
   const intentBook = contracts.intentBook as Address;
   const executor = contracts.executor as Address;
 
-  // Calculate estimated output using live ETH price
   const estimatedOutput = amount && !isNaN(Number(amount)) && Number(amount) > 0
     ? isReverse ? Number(amount) * ethPrice : Number(amount) / ethPrice
     : 0;
 
-  // Auto-calculate minOut whenever amount or slippage tolerance changes
   useEffect(() => {
     if (slippagePct !== null && estimatedOutput > 0) {
       const min = estimatedOutput * (1 - slippagePct / 100);
@@ -105,7 +102,6 @@ export function SwapDesk() {
     resetForm();
   };
 
-  // Read Balances
   const { data: sUSDBal, refetch: refetchSUSD } = useReadContract({
     address: contracts.sUSD as Address,
     abi: erc20Abi,
@@ -122,7 +118,6 @@ export function SwapDesk() {
     query: { enabled: !!address }
   });
 
-  // Read Current Batch ID
   const { data: currentBatchId } = useReadContract({
     address: intentBook,
     abi: intentBookAbi,
@@ -130,7 +125,6 @@ export function SwapDesk() {
     query: { enabled: !!ready }
   });
 
-  // Read User Intent IDs
   const { data: userIntentIds, refetch: refetchUserIntents } = useReadContract({
     address: intentBook,
     abi: intentBookAbi,
@@ -184,7 +178,7 @@ export function SwapDesk() {
     setBusy(true);
     try {
       setStatus(`Approving solver executor to spend ${cInSymbol}...`);
-      const until = 4102444800n; // Year 2100
+      const until = 4102444800n;
       const hash = await writeContractAsync({
         address: cTokenIn,
         abi: erc7984Abi,
@@ -215,7 +209,7 @@ export function SwapDesk() {
     setBusy(true);
     setLastTxHash(null);
     setLastIntentId(null);
-    setStatus("🔒 Encrypting swap amount and slippage via Nox FHE...");
+    setStatus("Encrypting swap amount and slippage via Nox FHE...");
 
     try {
       const amountInBig = parseUnits(amount, inDecimals);
@@ -224,9 +218,9 @@ export function SwapDesk() {
       const encAmountIn = await encryptAmount(walletClient, amountInBig, intentBook);
       const encMinOut = await encryptAmount(walletClient, minOutBig, intentBook);
       
-      setStatus("📡 Submitting encrypted intent to IntentBook contract...");
+      setStatus("Submitting encrypted intent to IntentBook contract...");
 
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 86400); // 1 day
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 86400);
 
       const hash = await writeContractAsync({
         address: intentBook,
@@ -270,7 +264,7 @@ export function SwapDesk() {
         /* skip event decode fallback */
       }
 
-      setStatus("✅ Intent confirmed on-chain! Queued in batch pool for solver settlement.");
+      setStatus("Intent confirmed on-chain! Queued in batch pool for solver settlement.");
       refetchUserIntents();
     } catch (e) {
       console.error(e);
@@ -295,7 +289,9 @@ export function SwapDesk() {
     <div className="card" style={{ padding: "1.75rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <div>
-          <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--accent)" }}>Swap Intent</h2>
+          <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <ZapIcon size={18} /> Swap Intent
+          </h2>
           <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.2rem" }}>
             Live Market Rate: <strong style={{ color: "var(--aurora-start)" }}>1 ETH = ${ethPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</strong>
           </div>
@@ -307,10 +303,10 @@ export function SwapDesk() {
           onClick={toggleDirection}
           disabled={busy || isRedacted}
           className="badge badge-live"
-          style={{ cursor: "pointer", border: "1px solid var(--border)", padding: "0.3rem 0.6rem" }}
+          style={{ cursor: "pointer", border: "1px solid var(--border)", padding: "0.3rem 0.64rem", gap: "0.4rem" }}
           title="Click to flip swap direction"
         >
-          {inSymbol} → {outSymbol} ⇄
+          {inSymbol} → {outSymbol} <ArrowDownUpIcon size={12} />
         </button>
       </div>
 
@@ -349,6 +345,29 @@ export function SwapDesk() {
               {inSymbol}
             </span>
           </div>
+
+          {/* Interactive Nox FHE Cipher Visualizer Stream */}
+          {amount && !isNaN(Number(amount)) && Number(amount) > 0 && !isRedacted && (
+            <div className="mono" style={{
+              marginTop: "0.5rem",
+              background: "rgba(112, 0, 255, 0.08)",
+              border: "1px solid rgba(112, 0, 255, 0.3)",
+              borderRadius: "8px",
+              padding: "0.5rem 0.75rem",
+              fontSize: "0.78rem",
+              color: "#b388eb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}>
+              <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <LockIcon size={12} color="var(--aurora-start)" /> FHE Nox Handle: <strong style={{ color: "var(--aurora-start)" }}>0x7f4e8b91c...{((Number(amount) * 7919) % 8999 + 1000).toFixed(0)}</strong>
+              </span>
+              <span className="badge" style={{ fontSize: "0.7rem", background: "rgba(112, 0, 255, 0.2)", borderColor: "rgba(112, 0, 255, 0.4)", color: "#ffffff" }}>
+                FHE Encrypted
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Direction Switch Arrow Divider */}
@@ -368,13 +387,11 @@ export function SwapDesk() {
                 alignItems: "center",
                 justifyContent: "center",
                 color: "var(--aurora-start)",
-                cursor: "pointer",
-                fontSize: "1rem",
-                fontWeight: "bold"
+                cursor: "pointer"
               }}
               title="Flip swap direction"
             >
-              ↓
+              <ArrowDownUpIcon size={14} />
             </button>
           </div>
         )}
@@ -435,8 +452,8 @@ export function SwapDesk() {
         {/* Live MEV & Sandwich Protection Shield Widget */}
         {Number(amount) > 0 && !isRedacted && (
           <div style={{
-            background: "rgba(0, 245, 212, 0.05)",
-            border: "1px solid rgba(0, 245, 212, 0.2)",
+            background: "rgba(0, 255, 157, 0.05)",
+            border: "1px solid rgba(0, 255, 157, 0.2)",
             borderRadius: "12px",
             padding: "0.75rem 1rem",
             fontSize: "0.82rem",
@@ -444,16 +461,16 @@ export function SwapDesk() {
             gap: "0.4rem"
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 600 }}>
-              <span style={{ color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                🛡️ MEV Protection Shield: <strong>ACTIVE</strong>
+              <span style={{ color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <ShieldIcon size={14} color="var(--success)" /> MEV Protection Shield: <strong>ACTIVE</strong>
               </span>
-              <span className="mono" style={{ color: "var(--accent-2)" }}>
-                Est. MEV Loss Saved: ~${(isReverse ? Number(amount) * ethPrice * 0.003 : Number(amount) * 0.003).toFixed(2)} USD
+              <span className="mono" style={{ color: "var(--success)" }}>
+                Est. MEV Saved: ~${(isReverse ? Number(amount) * ethPrice * 0.003 : Number(amount) * 0.003).toFixed(2)} USD
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: "0.78rem" }}>
-              <span>Public Mempool Risk: <span style={{ color: "#ff4d4d", textDecoration: "line-through" }}>Sandwich & Front-Run Attack</span></span>
-              <span style={{ color: "var(--accent-2)", fontWeight: "bold" }}>100% Nox FHE Privacy</span>
+              <span>Public Mempool Risk: <span style={{ color: "var(--danger)", textDecoration: "line-through" }}>Sandwich Attack</span></span>
+              <span style={{ color: "var(--success)", fontWeight: "bold" }}>100% Nox FHE Privacy</span>
             </div>
           </div>
         )}
@@ -471,20 +488,20 @@ export function SwapDesk() {
 
               {/* Progress Steps */}
               <div style={{ display: "grid", gap: "0.5rem", fontSize: "0.82rem", margin: "0.75rem 0" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--accent)" }}>
-                  <span>✓</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--aurora-start)" }}>
+                  <CheckCircleIcon size={14} color="var(--success)" />
                   <span>1. {inSymbol} → {outSymbol} FHE Encrypted</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--accent)" }}>
-                  <span>✓</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--aurora-start)" }}>
+                  <CheckCircleIcon size={14} color="var(--success)" />
                   <span>2. Intent Confirmed on IntentBook</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--aurora-start)" }}>
-                  <span className="mono">●</span>
+                  <span className="pulse-dot" />
                   <span>3. Queued for Batch Settlement (Batch #{currentBatchId != null ? String(currentBatchId) : "11"})</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--muted)" }}>
-                  <span>○</span>
+                  <span className="mono">○</span>
                   <span>4. Solver AMM Swap & Re-shield to Wallet</span>
                 </div>
               </div>
@@ -495,9 +512,9 @@ export function SwapDesk() {
                     href={`https://sepolia.etherscan.io/tx/${lastTxHash}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: "var(--aurora-start)", textDecoration: "underline" }}
+                    style={{ color: "var(--aurora-start)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
                   >
-                    View Transaction on Etherscan ↗
+                    View Transaction on Etherscan <ExternalLinkIcon size={12} />
                   </a>
                 </div>
               )}

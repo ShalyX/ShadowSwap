@@ -9,13 +9,16 @@ import { SwapDesk } from "@/components/SwapDesk";
 import { BatchDesk } from "@/components/BatchDesk";
 import { UnwrapDesk } from "@/components/UnwrapDesk";
 import { PrivacyPanel } from "@/components/PrivacyPanel";
+import { ZapIcon, LockIcon, BuildingIcon, SettingsIcon } from "@/components/Icons";
 
 export default function TradePage() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState<"trade" | "vault" | "compliance">("trade");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Secret hotkey: Alt + A or Ctrl + Shift + A
       if ((e.altKey && e.key.toLowerCase() === "a") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a")) {
         e.preventDefault();
         setIsAdmin((prev) => !prev);
@@ -25,57 +28,118 @@ export default function TradePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  if (!mounted) {
+    return (
+      <main className="container" style={{ paddingBottom: "5rem" }}>
+        <Header />
+        <div style={{ height: "400px" }} />
+      </main>
+    );
+  }
+
   return (
-    <main className="container" style={{ paddingBottom: "4rem" }}>
+    <main className="container" style={{ paddingBottom: "5rem", position: "relative", zIndex: 1 }}>
       <Header />
       <NetworkGuard />
       
-      <div style={{ marginBottom: "2rem", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "2rem", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "var(--font-space-mono)" }}>
-            Trade Console
-          </h1>
-          <p style={{ color: "var(--muted)", margin: "0.5rem 0 0" }}>
-            Submit encrypted intents {isAdmin && "and execute batched settlements"}
-          </p>
+      {/* Tactical Status Control Bar */}
+      <div style={{
+        background: "rgba(8, 11, 20, 0.85)",
+        border: "1px solid var(--border-strong)",
+        borderRadius: "14px",
+        padding: "0.85rem 1.25rem",
+        marginBottom: "2rem",
+        backdropFilter: "blur(16px)",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "1rem"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
+          <div>
+            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>
+              Routing Engine
+            </div>
+            <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Nox Intent Deck
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={() => setActiveTab("trade")}
+              className={`btn ${activeTab === "trade" ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", borderRadius: "8px", gap: "0.4rem" }}
+            >
+              <ZapIcon size={14} /> Swap Console
+            </button>
+            <button
+              onClick={() => setActiveTab("vault")}
+              className={`btn ${activeTab === "vault" ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", borderRadius: "8px", gap: "0.4rem" }}
+            >
+              <LockIcon size={14} /> Balance Vault
+            </button>
+            <button
+              onClick={() => setActiveTab("compliance")}
+              className={`btn ${activeTab === "compliance" ? "btn-primary" : "btn-ghost"}`}
+              style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", borderRadius: "8px", gap: "0.4rem" }}
+            >
+              <BuildingIcon size={14} /> Auditor ACL
+            </button>
+          </div>
         </div>
 
-        {/* Secret / Discreet Admin Mode Toggle Button */}
-        <button
-          onClick={() => setIsAdmin(!isAdmin)}
-          style={{
-            background: "none",
-            border: "none",
-            color: isAdmin ? "var(--aurora-start)" : "var(--border)",
-            fontSize: "0.8rem",
-            cursor: "pointer",
-            fontFamily: "var(--font-space-mono)",
-            opacity: isAdmin ? 1 : 0.4,
-            transition: "opacity 0.2s ease, color 0.2s ease"
-          }}
-          title="Toggle Admin/Solver Mode (Alt + A)"
-        >
-          {isAdmin ? "⚡ Admin Solver Active" : "⚙ Alt+A"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              TEE Enclave State
+            </div>
+            <div className="mono" style={{ fontSize: "0.82rem", color: "var(--aurora-start)", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span className="pulse-dot" /> Nox KMS Online
+            </div>
+          </div>
+
+          {/* Discreet Admin Solver Switch */}
+          <button
+            onClick={() => setIsAdmin(!isAdmin)}
+            className="badge"
+            style={{
+              cursor: "pointer",
+              borderColor: isAdmin ? "var(--aurora-start)" : "var(--border)",
+              color: isAdmin ? "var(--aurora-start)" : "var(--muted)",
+              background: isAdmin ? "rgba(0, 229, 255, 0.1)" : "transparent",
+              fontSize: "0.78rem",
+              gap: "0.4rem"
+            }}
+            title="Toggle Admin/Solver Mode (Alt + A)"
+          >
+            <SettingsIcon size={13} /> {isAdmin ? "Solver Mode Active" : "Alt+A Solver"}
+          </button>
+        </div>
       </div>
 
-      {isAdmin ? (
+      {/* Main Workstation Workspace */}
+      {activeTab === "trade" && (
         <div className="grid-2" style={{ alignItems: "start" }}>
           <div>
             <SwapDesk />
-            <UnwrapDesk />
           </div>
           <div>
-            <BatchDesk />
-            <PrivacyPanel />
+            {isAdmin ? <BatchDesk /> : <UnwrapDesk />}
           </div>
         </div>
-      ) : (
-        <div className="grid-2" style={{ alignItems: "start" }}>
-          <div>
-            <SwapDesk />
-            <UnwrapDesk />
-          </div>
+      )}
+
+      {activeTab === "vault" && (
+        <div style={{ maxWidth: "680px", margin: "0 auto" }}>
+          <UnwrapDesk />
+        </div>
+      )}
+
+      {activeTab === "compliance" && (
+        <div style={{ maxWidth: "780px", margin: "0 auto" }}>
           <PrivacyPanel />
         </div>
       )}
