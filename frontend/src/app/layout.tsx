@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   title: "ShadowSwap — Private AMM Routing on Nox",
   description:
     "Route Uniswap-style swaps through iExec Nox: encrypted sizes, batch netting, auditor ACL. WTF Hackathon Summer Edition.",
+  icons: {
+    icon: "/logo.jpg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -64,23 +64,17 @@ export function Header() {
     >
       <div style={{ display: "flex", alignItems: "center", gap: "2.5rem" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", opacity: 1 }}>
-          <div
+          <img
+            src="/logo.jpg"
+            alt="ShadowSwap"
             style={{
               width: 36,
               height: 36,
-              background: "var(--text)",
               borderRadius: "8px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--bg)",
-              fontWeight: 800,
-              fontSize: "1.2rem",
-              fontFamily: "var(--font-space-mono)"
+              objectFit: "cover",
+              border: "1px solid var(--border)"
             }}
-          >
-            S
-          </div>
+          />
           <div>
             <div style={{ fontWeight: 800, fontSize: "1.2rem", letterSpacing: "0.1em", color: "var(--text)", textTransform: "uppercase" }}>
               ShadowSwap
