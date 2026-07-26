@@ -7,6 +7,8 @@ import {
   TARGET_CHAIN_LABEL,
 } from "@/lib/chains";
 import Link from "next/link";
+import Image from "next/image";
+import logoImg from "../../public/logo.jpg";
 import { usePathname } from "next/navigation";
 import { useWriteContract } from "wagmi";
 import { faucetAbi } from "@/lib/abis";
@@ -64,15 +66,16 @@ export function Header() {
     >
       <div style={{ display: "flex", alignItems: "center", gap: "2.5rem" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", opacity: 1 }}>
-          <img
-            src="/logo.jpg"
+          <Image
+            src={logoImg}
             alt="ShadowSwap"
+            width={36}
+            height={36}
             style={{
-              width: 36,
-              height: 36,
               borderRadius: "8px",
               objectFit: "cover",
-              border: "1px solid var(--border)"
+              border: "1px solid var(--border)",
+              display: "block"
             }}
           />
           <div>
