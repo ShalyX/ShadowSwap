@@ -1,19 +1,12 @@
 /**
  * Solo settlement path for ShadowSwap.
  *
- * Reliable path (works with Nox ACL rules):
- *  1. Resolve clear amountIn / minOut (form override or private decrypt of intent handles)
- *  2. Encrypt amount for **cTokenIn** as applicationContract
- *  3. pullConfidential(cToken, user, enc, proof)
- *  4. startUnwrap(cToken, enc2, proof2)
- *  5. publicDecrypt(unwrapRequestId)
- *  6. finalizeUnwrapForIntent
- *  7. executeSoloAfterUnwrap
- *
- * Why not pullFromIntent alone?
- * Intent amount handles are ACL'd to the IntentBook at submit. confidentialTransferFrom
- * runs Nox ops as the cToken — without allowing cToken on the handle, Nox reverts
- * NotAllowed(handle, cToken). Re-encrypting for cToken uses fromExternal ACL correctly.
+ * Intent-bound path:
+ * 1. Resolve amountIn for progress checks; preserve the submitted minOut handle
+ *  2. pullFromIntent(intentId)
+ *  3. startUnwrapHeld(intentId, cTokenIn, pulledHandle)
+ *  4. publicDecrypt + finalizeUnwrapForIntent
+ *  5. executeSoloAfterUnwrap with parameters bound by the executor contract
  */
 import {
   type Address,
@@ -28,7 +21,7 @@ import {
   toBytes,
 } from "viem";
 import { executorAbi, intentBookAbi } from "@/lib/abis";
-import { decryptHandle, encryptAmount, publicDecryptHandle } from "@/lib/nox";
+import { decryptHandle, publicDecryptHandle } from "@/lib/nox";
 
 export type SoloSettleStep =
   | "idle"
@@ -357,34 +350,24 @@ export async function runSoloSettlement(params: {
       )
     );
 
-    // Resolve clear amounts (needed to re-encrypt for cToken ACL)
+    // Resolve amountIn for progress checks; minOut is proof-bound after pull.
     let amountInClear = params.amountInClear;
-    let minOutClear = params.minOutClear;
+    const expectedMinOut = params.minOutClear;
+    let minOutClear: bigint | undefined;
 
     if (amountInClear == null || amountInClear === 0n) {
       state = emit(pushLog(state, "Private-decrypting amountIn handle (user ACL)…"));
       const { value } = await decryptHandle(walletClient, loaded.amountInHandle);
       amountInClear = value as bigint;
     }
-    if (minOutClear == null) {
-      try {
-        state = emit(pushLog(state, "Private-decrypting minOut handle…"));
-        const { value } = await decryptHandle(walletClient, loaded.minOutHandle);
-        minOutClear = value as bigint;
-      } catch {
-        minOutClear = 0n;
-        state = emit(pushLog(state, "minOut decrypt failed — using 0 (set slippage carefully)"));
-      }
-    }
-
     if (amountInClear <= 0n) {
       throw new Error("amountIn is 0 — enter amount in the form or ensure intent has a size");
     }
 
     state = emit(
       pushLog(
-        { ...state, amountInClear, minOutClear, step: "pull" },
-        `Clear sizes: amountIn=${amountInClear} minOut=${minOutClear}`
+        { ...state, amountInClear, step: "pull" },
+        `Validated amountIn=${amountInClear}; minOut will be proof-bound on-chain`
       )
     );
 
@@ -401,25 +384,25 @@ export async function runSoloSettlement(params: {
       state = emit(pushLog(state, `  Init skipped/failed: ${e instanceof Error ? e.message.slice(0, 80) : String(e)}`));
     }
 
-    // Encrypt for cToken (applicationContract) so fromExternal ACL works inside the wrapper
-    state = emit(
-      pushLog(state, "1/5 Encrypt amount for cToken + pullConfidential…")
-    );
-    const encPull = await encryptAmount(walletClient, amountInClear, loaded.cTokenIn);
+    state = emit(pushLog(state, "1/5 pullFromIntent…"));
     const pullTx = await write({
       address: executor,
       abi: executorAbi,
-      functionName: "pullConfidential",
-      args: [loaded.cTokenIn, loaded.user, encPull.handle, encPull.handleProof],
+      functionName: "pullFromIntent",
+      args: [intentId],
     });
-    const pullReceipt = await waitSuccess(publicClient, pullTx, "pullConfidential");
+    const pullReceipt = await waitSuccess(publicClient, pullTx, "pullFromIntent");
 
-    // Optional: capture transferred handle for logging (unwrap uses fresh external encrypt)
-    let pulledAmountHandle: Hex | undefined;
-    try {
-      pulledAmountHandle = parsePulledAmountHandle(pullReceipt.logs, executor);
-    } catch {
-      pulledAmountHandle = undefined;
+    const pulledAmountHandle = parsePulledAmountHandle(pullReceipt.logs, executor);
+
+    state = emit(pushLog(state, "Public-decrypting the submitted minOut for proof-bound execution…"));
+    const minOutResult = await publicDecryptWithRetry(walletClient, loaded.minOutHandle);
+    minOutClear = minOutResult.value;
+    if (minOutClear <= 0n) {
+      throw new Error("Submitted minOut must be greater than 0 — settlement is fail-closed");
+    }
+    if (expectedMinOut != null && expectedMinOut !== minOutClear) {
+      throw new Error("Submitted minOut does not match this session's expected value");
     }
 
     state = emit(
@@ -430,14 +413,12 @@ export async function runSoloSettlement(params: {
       )
     );
 
-    // 2) Start unwrap with fresh encryption for cToken
-    state = emit(pushLog(state, "2/5 Encrypt + startUnwrap…"));
-    const encUnwrap = await encryptAmount(walletClient, amountInClear, loaded.cTokenIn);
+    state = emit(pushLog(state, "2/5 startUnwrapHeld…"));
     const unwrapTx = await write({
       address: executor,
       abi: executorAbi,
-      functionName: "startUnwrap",
-      args: [loaded.cTokenIn, encUnwrap.handle, encUnwrap.handleProof],
+      functionName: "startUnwrapHeld",
+      args: [intentId, loaded.cTokenIn, pulledAmountHandle],
     });
     const unwrapReceipt = await waitSuccess(publicClient, unwrapTx, "startUnwrap");
     const unwrapRequestId = parseUnwrapRequestId(unwrapReceipt.logs, executor);
@@ -495,12 +476,7 @@ export async function runSoloSettlement(params: {
       functionName: "executeSoloAfterUnwrap",
       args: [
         intentId,
-        loaded.user,
-        loaded.cTokenOut,
-        loaded.tokenIn,
-        loaded.tokenOut,
-        amountInClear,
-        minOutClear ?? 0n,
+        minOutResult.decryptionProof,
         deadline,
       ],
     });

@@ -5,8 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {
     Nox,
-    euint256,
-    externalEuint256
+    euint256
 } from "@iexec-nox/nox-protocol-contracts/contracts/sdk/Nox.sol";
 import {IERC7984} from "@iexec-nox/nox-confidential-contracts/contracts/interfaces/IERC7984.sol";
 import {IERC20ToERC7984Wrapper} from "@iexec-nox/nox-confidential-contracts/contracts/interfaces/IERC20ToERC7984Wrapper.sol";
@@ -26,44 +25,36 @@ import {ShadowIntentBook} from "./ShadowIntentBook.sol";
  *
  * ## Why this is still valuable privacy
  * - Intent book keeps sizes encrypted while orders wait / batch.
- * - Batch netting (same pair) collapses multiple intents into fewer pool touches.
+ * - Same-pair aggregation collapses multiple intents into fewer pool touches.
  * - Encrypted minOut prevents front-running the limit until execution.
  * - Auditor ACL works pre-execution without world-public amounts.
  *
  * ## Honesty
  * Uniswap (and any transparent AMM) requires plaintext amounts at swap time.
  * ShadowSwap does not claim permanent size secrecy after settlement — it claims
- * **pre-trade privacy + batch obfuscation + private balances after re-shield**.
+ * **pre-trade parameter privacy + private balances after re-shield**.
  */
 contract ShadowSwapExecutor {
     using SafeERC20 for IERC20;
 
-    // ============ Types ============
-
-    struct SoloExecutionParams {
-        uint256 intentId;
-        /// @dev publicDecrypt proof for the amount burned during unwrap
-        bytes unwrapAmountProof;
-        euint256 unwrapRequestId;
-        /// @dev plaintext amountIn after public decrypt (must match proof validation path)
-        uint256 amountInClear;
-        /// @dev plaintext minOut after public decrypt
-        uint256 minOutClear;
-        bytes minOutDecryptProof;
-    }
-
     // ============ Storage ============
 
     address public owner;
+    mapping(address => bool) public authorizedSolvers;
     ShadowIntentBook public intentBook;
     ISwapAdapter public swapAdapter;
     /// @notice Last amount handle pulled for an intent (event-parse fallback).
     mapping(uint256 => euint256) public lastPulledAmount;
+    mapping(uint256 => euint256) public unwrapRequestForIntent;
+    mapping(uint256 => uint256) private _finalizedAmountIn;
+    mapping(uint256 => bool) private _finalizedAmountReady;
+    mapping(uint256 => bool) public settlementStarted;
 
     // ============ Events ============
 
     event SwapAdapterUpdated(address indexed adapter);
     event IntentBookUpdated(address indexed book);
+    event SolverAuthorizationUpdated(address indexed solver, bool authorized);
     event SoloSwapExecuted(
         uint256 indexed intentId,
         address indexed user,
@@ -94,26 +85,47 @@ contract ShadowSwapExecutor {
         euint256 unwrapRequestId
     );
     event UnwrapFinalized(uint256 indexed intentId, address indexed cTokenIn, euint256 unwrapRequestId);
+    event IntentRefunded(uint256 indexed intentId, address indexed user, uint256 clearAmount);
 
     // ============ Errors ============
 
     error NotOwner();
+    error UnauthorizedSolver();
+    error UnauthorizedSettler();
     error ZeroAddress();
     error IntentNotReady();
     error IntentExpired();
+    error IntentMismatch();
+    error DuplicateIntent();
+    error UnwrapNotFinalized();
+    error IntentAlreadyPulled();
     error BadMinOut();
     error TransferFailed();
     error LengthMismatch();
+    error AssetPairMismatch();
+    error RefundNotReady();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
+    modifier onlySolver() {
+        if (!authorizedSolvers[msg.sender]) revert UnauthorizedSolver();
+        _;
+    }
+
     constructor(address intentBook_, address swapAdapter_) {
         owner = msg.sender;
+        authorizedSolvers[msg.sender] = true;
         intentBook = ShadowIntentBook(intentBook_);
         swapAdapter = ISwapAdapter(swapAdapter_);
+    }
+
+    function setSolver(address solver, bool authorized) external onlyOwner {
+        if (solver == address(0)) revert ZeroAddress();
+        authorizedSolvers[solver] = authorized;
+        emit SolverAuthorizationUpdated(solver, authorized);
     }
 
     function setSwapAdapter(address adapter_) external onlyOwner {
@@ -133,31 +145,34 @@ contract ShadowSwapExecutor {
      * @dev Off-chain prep required:
      *  - User setOperator(this, until)
      *  - Pull confidential funds, start unwrap, publicDecrypt unwrap handle
-     *  - publicDecrypt minOut handle (or user supplies clear minOut they accept)
+     *  - publicDecrypt the submitted minOut handle and provide its Nox proof
      *
-     * For hackathon reliability, this function accepts clear amountIn/minOut that
-     * were obtained via Nox publicDecrypt off-chain, and performs the public AMM leg.
-     * The confidential pull+unwrap steps are exposed as separate helpers so the UI
-     * can orchestrate multi-tx Nox flows.
+     * The finalized input amount is stored by the proof-verified unwrap path, and the
+     * minimum output is derived from the submitted encrypted handle's public-decrypt
+     * proof. The UI orchestrates these multi-transaction Nox flows.
      */
     function executeSoloAfterUnwrap(
         uint256 intentId,
-        address user,
-        address cTokenOut,
-        address tokenIn,
-        address tokenOut,
-        uint256 amountInClear,
-        uint256 minOutClear,
+        bytes calldata minOutDecryptProof,
         uint256 deadline
     ) external returns (uint256 amountOut) {
         ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
-        if (intent.user != user) revert IntentNotReady();
-        if (
-            intent.status != ShadowIntentBook.IntentStatus.Pending &&
-            intent.status != ShadowIntentBook.IntentStatus.Batched
-        ) revert IntentNotReady();
-        if (block.timestamp > intent.deadline) revert IntentExpired();
-        if (amountInClear == 0) revert BadMinOut();
+        _validateIntentAssets(intent);
+        if (msg.sender != intent.user && !authorizedSolvers[msg.sender]) {
+            revert UnauthorizedSettler();
+        }
+        if (intent.status != ShadowIntentBook.IntentStatus.Settling) revert IntentNotReady();
+        uint256 amountInClear = _finalizedAmountIn[intentId];
+        if (!_finalizedAmountReady[intentId] || amountInClear == 0) revert UnwrapNotFinalized();
+        uint256 minOutClear = Nox.publicDecrypt(intent.minAmountOut, minOutDecryptProof);
+        if (minOutClear == 0) revert BadMinOut();
+        delete _finalizedAmountIn[intentId];
+        delete _finalizedAmountReady[intentId];
+
+        address user = intent.user;
+        address cTokenOut = intent.cTokenOut;
+        address tokenIn = intent.tokenIn;
+        address tokenOut = intent.tokenOut;
 
         // Swap public ERC-20 held by this contract (after unwrap finalize)
         IERC20(tokenIn).forceApprove(address(swapAdapter), amountInClear);
@@ -194,27 +209,50 @@ contract ShadowSwapExecutor {
     function executeBatchSamePair(
         uint32 batchId,
         uint256[] calldata intentIds,
-        address[] calldata users,
-        address cTokenOut,
-        address tokenIn,
-        address tokenOut,
-        uint256[] calldata amountIns,
-        uint256[] calldata minOuts,
+        bytes[] calldata minOutDecryptProofs,
         uint256 deadline
-    ) external returns (uint256 netOut) {
+    ) external onlySolver returns (uint256 netOut) {
         uint256 n = intentIds.length;
-        if (
-            users.length != n ||
-            amountIns.length != n ||
-            minOuts.length != n
-        ) revert LengthMismatch();
+        if (minOutDecryptProofs.length != n) revert LengthMismatch();
         if (n == 0) revert IntentNotReady();
 
+        ShadowIntentBook.Intent memory firstIntent = intentBook.getIntent(intentIds[0]);
+        address cTokenOut = firstIntent.cTokenOut;
+        address tokenIn = firstIntent.tokenIn;
+        address tokenOut = firstIntent.tokenOut;
+        address[] memory users = new address[](n);
+        uint256[] memory amountIns = new uint256[](n);
+        uint256[] memory minOuts = new uint256[](n);
         uint256 netIn;
         uint256 maxMinOut; // conservative: require out >= sum(minOuts)
         for (uint256 i = 0; i < n; i++) {
-            netIn += amountIns[i];
-            maxMinOut += minOuts[i];
+            ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentIds[i]);
+            _validateIntentAssets(intent);
+            uint256 amountIn = _finalizedAmountIn[intentIds[i]];
+            if (
+                intent.status != ShadowIntentBook.IntentStatus.Settling ||
+                intent.batchId != batchId ||
+                intent.cTokenOut != cTokenOut ||
+                intent.tokenIn != tokenIn ||
+                intent.tokenOut != tokenOut ||
+                !_finalizedAmountReady[intentIds[i]] ||
+                amountIn == 0
+            ) revert IntentMismatch();
+            for (uint256 j = 0; j < i; j++) {
+                if (intentIds[j] == intentIds[i]) revert DuplicateIntent();
+            }
+            uint256 minOut = Nox.publicDecrypt(
+                intent.minAmountOut,
+                minOutDecryptProofs[i]
+            );
+            if (minOut == 0) revert BadMinOut();
+            users[i] = intent.user;
+            amountIns[i] = amountIn;
+            minOuts[i] = minOut;
+            delete _finalizedAmountIn[intentIds[i]];
+            delete _finalizedAmountReady[intentIds[i]];
+            netIn += amountIn;
+            maxMinOut += minOut;
         }
 
         IERC20(tokenIn).forceApprove(address(swapAdapter), netIn);
@@ -238,6 +276,7 @@ contract ShadowSwapExecutor {
             uint256 share = (i == n - 1)
                 ? (netOut - distributed)
                 : (netOut * amountIns[i]) / netIn;
+            if (share < minOuts[i]) revert BadMinOut();
             distributed += share;
             IERC20(tokenOut).forceApprove(cTokenOut, share);
             IERC20ToERC7984Wrapper(cTokenOut).wrap(users[i], share);
@@ -247,26 +286,6 @@ contract ShadowSwapExecutor {
         emit BatchSwapExecuted(batchId, tokenIn, tokenOut, netIn, netOut, n);
     }
 
-    /**
-     * @notice Helper: pull confidential funds from user as operator into this contract.
-     * @dev Requires user setOperator(this, until) on cTokenIn.
-     *      Encrypt amount for `cTokenIn` as applicationContract (fromExternal msg.sender = cToken).
-     */
-    function pullConfidential(
-        address cTokenIn,
-        address from,
-        externalEuint256 encryptedAmount,
-        bytes calldata inputProof
-    ) external returns (euint256 transferred) {
-        transferred = IERC7984(cTokenIn).confidentialTransferFrom(
-            from,
-            address(this),
-            encryptedAmount,
-            inputProof
-        );
-        Nox.allowThis(transferred);
-        emit ConfidentialPulled(0, from, cTokenIn, transferred);
-    }
 
     /**
      * @notice Pull the intent's encrypted amountIn from the user into this contract.
@@ -278,14 +297,22 @@ contract ShadowSwapExecutor {
      */
     function pullFromIntent(uint256 intentId) external returns (euint256 transferred) {
         ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
+        _validateIntentAssets(intent);
+        if (msg.sender != intent.user && !authorizedSolvers[msg.sender]) {
+            revert UnauthorizedSettler();
+        }
         if (
             intent.status != ShadowIntentBook.IntentStatus.Pending &&
             intent.status != ShadowIntentBook.IntentStatus.Batched
         ) revert IntentNotReady();
         if (block.timestamp > intent.deadline) revert IntentExpired();
+        if (settlementStarted[intentId]) revert IntentAlreadyPulled();
+        settlementStarted[intentId] = true;
+        intentBook.beginSettlement(intentId);
 
         // Grant executor + cToken ACL on intent handles for settlement
         intentBook.allowExecutorOnIntent(intentId);
+        Nox.allowPublicDecryption(intent.minAmountOut);
 
         transferred = IERC7984(intent.cTokenIn).confidentialTransferFrom(
             intent.user,
@@ -300,52 +327,32 @@ contract ShadowSwapExecutor {
     }
 
     /**
-     * @notice Helper: start unwrap of confidential balance held by this contract.
-     * @dev Encrypt amount for `cTokenIn` as applicationContract.
-     */
-    function startUnwrap(
-        address cTokenIn,
-        externalEuint256 encryptedAmount,
-        bytes calldata inputProof
-    ) external returns (euint256 unwrapRequestId) {
-        unwrapRequestId = IERC20ToERC7984Wrapper(cTokenIn).unwrap(
-            address(this),
-            address(this),
-            encryptedAmount,
-            inputProof
-        );
-        emit UnwrapStarted(0, cTokenIn, unwrapRequestId);
-    }
-
-    /**
      * @notice Start unwrap using an on-chain handle already allowed to this contract
-     *         (e.g. the handle returned by {pullFromIntent} / {pullConfidential}).
+     *         (the handle returned by {pullFromIntent}).
      */
     function startUnwrapHeld(
         uint256 intentId,
         address cTokenIn,
         euint256 amount
     ) external returns (euint256 unwrapRequestId) {
+        ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
+        if (msg.sender != intent.user && !authorizedSolvers[msg.sender]) {
+            revert UnauthorizedSettler();
+        }
+        if (
+            intent.status != ShadowIntentBook.IntentStatus.Settling ||
+            cTokenIn != intent.cTokenIn ||
+            euint256.unwrap(amount) != euint256.unwrap(lastPulledAmount[intentId])
+        ) revert IntentMismatch();
         unwrapRequestId = IERC20ToERC7984Wrapper(cTokenIn).unwrap(
             address(this),
             address(this),
             amount
         );
+        unwrapRequestForIntent[intentId] = unwrapRequestId;
         emit UnwrapStarted(intentId, cTokenIn, unwrapRequestId);
     }
 
-    /**
-     * @notice Helper: finalize unwrap with Nox publicDecrypt proof → ERC-20 lands here.
-     * @dev Off-chain: `handleClient.publicDecrypt(unwrapRequestId)` → pass `decryptionProof`.
-     */
-    function finalizeUnwrap(
-        address cTokenIn,
-        euint256 unwrapRequestId,
-        bytes calldata decryptedAmountAndProof
-    ) external {
-        IERC20ToERC7984Wrapper(cTokenIn).finalizeUnwrap(unwrapRequestId, decryptedAmountAndProof);
-        emit UnwrapFinalized(0, cTokenIn, unwrapRequestId);
-    }
 
     /**
      * @notice Finalize unwrap and tag the intent id for UI/indexers.
@@ -356,8 +363,56 @@ contract ShadowSwapExecutor {
         euint256 unwrapRequestId,
         bytes calldata decryptedAmountAndProof
     ) external {
+        ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
+        if (msg.sender != intent.user && !authorizedSolvers[msg.sender]) {
+            revert UnauthorizedSettler();
+        }
+        if (
+            intent.status != ShadowIntentBook.IntentStatus.Settling ||
+            cTokenIn != intent.cTokenIn ||
+            euint256.unwrap(unwrapRequestId) != euint256.unwrap(unwrapRequestForIntent[intentId])
+        ) revert IntentMismatch();
+        uint256 amountInClear = Nox.publicDecrypt(unwrapRequestId, decryptedAmountAndProof);
         IERC20ToERC7984Wrapper(cTokenIn).finalizeUnwrap(unwrapRequestId, decryptedAmountAndProof);
+        _finalizedAmountIn[intentId] = amountInClear;
+        _finalizedAmountReady[intentId] = true;
         emit UnwrapFinalized(intentId, cTokenIn, unwrapRequestId);
+    }
+
+    function refundConfidential(uint256 intentId) external {
+        ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
+        if (msg.sender != intent.user) revert UnauthorizedSettler();
+        if (intent.status != ShadowIntentBook.IntentStatus.Settling) revert IntentNotReady();
+        euint256 amount = lastPulledAmount[intentId];
+        if (
+            euint256.unwrap(amount) == bytes32(0) ||
+            euint256.unwrap(unwrapRequestForIntent[intentId]) != bytes32(0) ||
+            _finalizedAmountReady[intentId]
+        ) revert RefundNotReady();
+
+        lastPulledAmount[intentId] = euint256.wrap(bytes32(0));
+        delete settlementStarted[intentId];
+        IERC7984(intent.cTokenIn).confidentialTransfer(intent.user, amount);
+        intentBook.markRefunded(intentId);
+        emit IntentRefunded(intentId, intent.user, 0);
+    }
+
+    function refundFinalized(uint256 intentId) external {
+        ShadowIntentBook.Intent memory intent = intentBook.getIntent(intentId);
+        if (msg.sender != intent.user) revert UnauthorizedSettler();
+        if (
+            intent.status != ShadowIntentBook.IntentStatus.Settling ||
+            !_finalizedAmountReady[intentId]
+        ) revert RefundNotReady();
+        uint256 amount = _finalizedAmountIn[intentId];
+
+        delete _finalizedAmountIn[intentId];
+        delete _finalizedAmountReady[intentId];
+        delete settlementStarted[intentId];
+        IERC20(intent.tokenIn).forceApprove(intent.cTokenIn, amount);
+        IERC20ToERC7984Wrapper(intent.cTokenIn).wrap(intent.user, amount);
+        intentBook.markRefunded(intentId);
+        emit IntentRefunded(intentId, intent.user, amount);
     }
 
     /**
@@ -376,5 +431,12 @@ contract ShadowSwapExecutor {
     ) external view returns (uint256 minOutClear) {
         euint256 handle = intentBook.minOutHandle(intentId);
         minOutClear = Nox.publicDecrypt(handle, decryptionProof);
+    }
+
+    function _validateIntentAssets(ShadowIntentBook.Intent memory intent) private view {
+        if (
+            !intentBook.isAssetPair(intent.cTokenIn, intent.tokenIn) ||
+            !intentBook.isAssetPair(intent.cTokenOut, intent.tokenOut)
+        ) revert AssetPairMismatch();
     }
 }

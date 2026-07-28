@@ -16,7 +16,9 @@ export function SwapDesk() {
   const { writeContractAsync } = useWriteContract();
   
   const contracts = deployments.contracts as Record<string, string>;
-  const ready = contracts.intentBook && isAddress(contracts.intentBook);
+  const deploymentConfig = deployments.config as { executorSecurityVersion?: number };
+  const hardenedExecutor = deploymentConfig.executorSecurityVersion === 2;
+  const ready = contracts.intentBook && isAddress(contracts.intentBook) && hardenedExecutor;
 
   const [isReverse, setIsReverse] = useState(false); // false: sUSD -> sETH, true: sETH -> sUSD
   const [amount, setAmount] = useState("");
@@ -177,8 +179,8 @@ export function SwapDesk() {
     if (!walletClient || !publicClient || !address) return;
     setBusy(true);
     try {
-      setStatus(`Approving solver executor to spend ${cInSymbol}...`);
-      const until = 4102444800n;
+      setStatus(`Approving the settlement executor for 1 hour...`);
+      const until = BigInt(Math.floor(Date.now() / 1000) + 3600);
       const hash = await writeContractAsync({
         address: cTokenIn,
         abi: erc7984Abi,
@@ -187,7 +189,7 @@ export function SwapDesk() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Operator approval reverted");
-      setStatus(`Executor operator approved for ${cInSymbol}! Ready for confidential swaps.`);
+      setStatus(`Executor approved for ${cInSymbol} until ${new Date(Number(until) * 1000).toLocaleTimeString()}.`);
     } catch (e) {
       console.error(e);
       setStatus(formatError(e));
@@ -314,6 +316,12 @@ export function SwapDesk() {
         <div><strong>Public sUSD:</strong> {sUSDBal !== undefined ? Number(formatUnits(sUSDBal, 6)).toFixed(2) : "0.00"}</div>
         <div><strong>Public sETH:</strong> {sETHBal !== undefined ? Number(formatUnits(sETHBal, 18)).toFixed(4) : "0.0000"}</div>
       </div>
+
+      {!hardenedExecutor && (
+        <div style={{ marginBottom: "1rem", padding: "0.75rem", border: "1px solid var(--danger)", borderRadius: "10px", color: "var(--danger)", fontSize: "0.82rem" }}>
+          Legacy executor paused. Deploy security version 2 before approving or submitting intents.
+        </div>
+      )}
 
       <div style={{ display: "grid", gap: "1rem" }}>
         {/* Input Amount */}
@@ -449,7 +457,7 @@ export function SwapDesk() {
           </div>
         </div>
 
-        {/* Live MEV & Sandwich Protection Shield Widget */}
+        {/* Exposure estimate; not a protection guarantee. */}
         {Number(amount) > 0 && !isRedacted && (
           <div style={{
             background: "rgba(0, 255, 157, 0.05)",
@@ -462,15 +470,15 @@ export function SwapDesk() {
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 600 }}>
               <span style={{ color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <ShieldIcon size={14} color="var(--success)" /> MEV Protection Shield: <strong>ACTIVE</strong>
+                <ShieldIcon size={14} color="var(--success)" /> Pre-Settlement Privacy: <strong>ACTIVE</strong>
               </span>
               <span className="mono" style={{ color: "var(--success)" }}>
-                Est. MEV Saved: ~${(isReverse ? Number(amount) * ethPrice * 0.003 : Number(amount) * 0.003).toFixed(2)} USD
+                Size hidden while intent is queued
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: "0.78rem" }}>
-              <span>Public Mempool Risk: <span style={{ color: "var(--danger)", textDecoration: "line-through" }}>Sandwich Attack</span></span>
-              <span style={{ color: "var(--success)", fontWeight: "bold" }}>100% Nox FHE Privacy</span>
+              <span>Public AMM execution remains visible and MEV-exposed</span>
+              <span style={{ color: "var(--success)", fontWeight: "bold" }}>Nox-encrypted intent handles</span>
             </div>
           </div>
         )}

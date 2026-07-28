@@ -262,16 +262,18 @@ export const intentBookAbi = [
 export const executorAbi = [
   {
     type: "function",
+    name: "authorizedSolvers",
+    stateMutability: "view",
+    inputs: [{ name: "solver", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
     name: "executeSoloAfterUnwrap",
     stateMutability: "nonpayable",
     inputs: [
       { name: "intentId", type: "uint256" },
-      { name: "user", type: "address" },
-      { name: "cTokenOut", type: "address" },
-      { name: "tokenIn", type: "address" },
-      { name: "tokenOut", type: "address" },
-      { name: "amountInClear", type: "uint256" },
-      { name: "minOutClear", type: "uint256" },
+      { name: "minOutDecryptProof", type: "bytes" },
       { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "amountOut", type: "uint256" }],
@@ -283,28 +285,12 @@ export const executorAbi = [
     inputs: [
       { name: "batchId", type: "uint32" },
       { name: "intentIds", type: "uint256[]" },
-      { name: "users", type: "address[]" },
-      { name: "cTokenOut", type: "address" },
-      { name: "tokenIn", type: "address" },
-      { name: "tokenOut", type: "address" },
-      { name: "amountIns", type: "uint256[]" },
-      { name: "minOuts", type: "uint256[]" },
+      { name: "minOutDecryptProofs", type: "bytes[]" },
       { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "netOut", type: "uint256" }],
   },
-  {
-    type: "function",
-    name: "pullConfidential",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "cTokenIn", type: "address" },
-      { name: "from", type: "address" },
-      { name: "encryptedAmount", type: "bytes32" },
-      { name: "inputProof", type: "bytes" },
-    ],
-    outputs: [{ type: "bytes32" }],
-  },
+
   {
     type: "function",
     name: "pullFromIntent",
@@ -312,17 +298,7 @@ export const executorAbi = [
     inputs: [{ name: "intentId", type: "uint256" }],
     outputs: [{ type: "bytes32" }],
   },
-  {
-    type: "function",
-    name: "startUnwrap",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "cTokenIn", type: "address" },
-      { name: "encryptedAmount", type: "bytes32" },
-      { name: "inputProof", type: "bytes" },
-    ],
-    outputs: [{ type: "bytes32" }],
-  },
+
   {
     type: "function",
     name: "startUnwrapHeld",
@@ -334,17 +310,7 @@ export const executorAbi = [
     ],
     outputs: [{ type: "bytes32" }],
   },
-  {
-    type: "function",
-    name: "finalizeUnwrap",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "cTokenIn", type: "address" },
-      { name: "unwrapRequestId", type: "bytes32" },
-      { name: "decryptedAmountAndProof", type: "bytes" },
-    ],
-    outputs: [],
-  },
+
   {
     type: "function",
     name: "finalizeUnwrapForIntent",

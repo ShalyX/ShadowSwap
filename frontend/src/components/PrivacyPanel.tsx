@@ -1,28 +1,56 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
-import { isAddress } from "viem";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { Address, isAddress, zeroAddress } from "viem";
 import { formatError } from "@/lib/errors";
+import deployments from "@/lib/deployments.json";
+import { intentBookAbi } from "@/lib/abis";
 import { ShieldIcon, LockIcon, BuildingIcon, KeyIcon, ExternalLinkIcon, CheckCircleIcon } from "@/components/Icons";
 
 export function PrivacyPanel() {
   const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
+  const contracts = deployments.contracts as Record<string, string>;
+  const ready =
+    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 2 &&
+    isAddress(contracts.intentBook) &&
+    contracts.intentBook !== zeroAddress;
+
+  const [intentId, setIntentId] = useState("");
   const [auditorAddr, setAuditorAddr] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   const handleGrantAuditor = async () => {
-    if (!address || !isAddress(auditorAddr)) {
+    if (!ready) {
+      setStatus("Auditor grants are unavailable until the hardened deployment is active");
+      return;
+    }
+    if (!address || !publicClient || !isAddress(auditorAddr)) {
       setStatus("Enter a valid Ethereum address for the Auditor");
       return;
     }
+    if (!/^\d+$/.test(intentId) || BigInt(intentId) <= 0n) {
+      setStatus("Enter a valid intent ID you own");
+      return;
+    }
     setBusy(true);
-    setStatus("Registering Auditor Selective Disclosure Access Control via Nox TEE...");
+    setStatus("Submitting the auditor ACL grant to ShadowIntentBook...");
     try {
-      await new Promise((res) => setTimeout(res, 1200));
-      setStatus(`Granted read-only compliance decryption rights to Auditor (${auditorAddr.slice(0, 6)}...${auditorAddr.slice(-4)})`);
+      const hash = await writeContractAsync({
+        address: contracts.intentBook as Address,
+        abi: intentBookAbi,
+        functionName: "grantAuditor",
+        args: [BigInt(intentId), auditorAddr],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("Auditor ACL transaction reverted");
+      setStatus(
+        `Intent #${intentId}: granted viewer-only decrypt rights to ${auditorAddr.slice(0, 6)}…${auditorAddr.slice(-4)} · tx ${hash.slice(0, 10)}…`
+      );
     } catch (e) {
       setStatus(formatError(e));
     } finally {
@@ -49,8 +77,8 @@ export function PrivacyPanel() {
         <div style={{ display: "flex", gap: "1rem" }}>
           <div style={{ color: "var(--aurora-start)" }}><ShieldIcon size={16} /></div>
           <div>
-            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>Batch Netting</strong>
-            <span style={{ color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>Intents share a seal period to allow same-pair flow to net into a single AMM touch.</span>
+            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>Batch Aggregation</strong>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>Same-pair intents can share one pool interaction; individual values are still revealed during settlement.</span>
           </div>
         </div>
 
@@ -65,17 +93,27 @@ export function PrivacyPanel() {
         <div style={{ display: "flex", gap: "1rem" }}>
           <div style={{ color: "var(--aurora-start)" }}><BuildingIcon size={16} /></div>
           <div>
-            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>Auditor ACL (Institutional DeFi)</strong>
-            <span style={{ color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>Grant view rights to regulators without giving spending rights.</span>
+            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>User-Directed Auditor ACL</strong>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>Grant an address viewer rights without giving it spending rights.</span>
           </div>
         </div>
 
         {/* Interactive Auditor ACL Widget */}
         <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1rem", marginTop: "0.5rem" }}>
           <label className="label" style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--aurora-start)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <BuildingIcon size={14} /> Institutional Auditor Selective Disclosure
+            <BuildingIcon size={14} /> Selective Auditor Disclosure
           </label>
           <div style={{ display: "grid", gap: "0.5rem" }}>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              className="input mono"
+              placeholder="Intent ID you own"
+              value={intentId}
+              onChange={(e) => setIntentId(e.target.value)}
+              style={{ fontSize: "0.85rem", height: "2.4rem" }}
+            />
             <input
               type="text"
               className="input mono"
@@ -86,7 +124,7 @@ export function PrivacyPanel() {
             />
             <button
               className="btn btn-ghost"
-              disabled={!isConnected || busy || !auditorAddr}
+              disabled={!ready || !isConnected || busy || !intentId || !auditorAddr}
               onClick={handleGrantAuditor}
               style={{ padding: "0.5rem", fontSize: "0.85rem", width: "100%", gap: "0.4rem" }}
             >

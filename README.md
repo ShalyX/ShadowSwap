@@ -1,8 +1,9 @@
 # 🌑 ShadowSwap
 
-**The first Privacy-Preserving Intent-Based AMM Router built on iExec Nox.**
+**A privacy-aware intent settlement prototype built on iExec Nox.**
 
-**Live Demo (Sepolia):** [https://shadowswap-app.vercel.app](https://shadowswap-app.vercel.app)
+**Demo UI:** [https://shadowswap-app.vercel.app](https://shadowswap-app.vercel.app)
+The legacy Sepolia deployment is transaction-paused in the UI until the hardened v2 contracts are redeployed.
 
 ---
 
@@ -14,22 +15,22 @@ Users are forced to choose between hiding their trades on centralized platforms 
 ## 🛡️ The Solution: ShadowSwap
 ShadowSwap is a decentralized intent router that uses **Fully Homomorphic Encryption (FHE)** via the **iExec Nox Protocol** to shield the two most vulnerable parameters of a trade: `amountIn` and `minAmountOut`.
 
-By keeping these parameters encrypted at rest, ShadowSwap enables **private, MEV-resistant trading** while still tapping into the massive liquidity of public AMMs like Uniswap. 
+By keeping these parameters encrypted while an intent is resting, ShadowSwap delays size and slippage disclosure until public-AMM settlement. It does **not** guarantee protection from MEV once values are revealed for execution.
 
 ### 🌟 Key Differentiating Features
-* **🛡️ MEV & Sandwich Protection Shield**: Live visual estimator calculating real dollar MEV savings vs public DEX mempools.
-* **🏛️ Institutional Auditor Selective Disclosure**: Nox TEE Access Control (`Nox.allow(handle, auditor)`) allowing traders to grant read-only view keys to compliance auditors without revealing trade sizes to the public mempool.
+* **🛡️ Pre-settlement parameter privacy**: `amountIn` and `minAmountOut` remain encrypted while the intent waits; the UI shows exposure estimates, not guaranteed savings.
+* **🏛️ User-directed auditor disclosure**: Nox viewer ACL (`Nox.addViewer`) lets an intent owner grant a specific address read access without granting spending authority.
 * **🔄 Bi-Directional Swaps**: Native support for two-way confidential swaps (`sUSD ↔ sETH`).
-* **📊 Real-Time Market Pricing**: Integrated live CoinGecko & CoinCap price feeds for dynamic market-aligned slippage calculation.
+* **📊 Market reference pricing**: CoinGecko is used for UI estimates when available; execution uses the configured on-chain venue.
 
 ### How it Works
 1. **Wrap & Shield**: Users wrap standard ERC20 tokens (e.g., sUSD) into confidential ERC7984 tokens (e.g., cSUSD).
 2. **Encrypted Intents**: Users submit encrypted intents to the `ShadowIntentBook` smart contract. Only the token pair is public; the sizes remain FHE-encrypted Nox handles.
-3. **Solver Netting**: An off-chain solver bot batches multiple intents for the same pair. Using strict Access Control logic (ACL), the solver is permitted to decrypt only the **aggregate sum** of the batch, never the individual intents.
-4. **Public Execution**: The solver executes a single optimized trade on a public AMM (like Uniswap V2) using the netted amount. Individual user sizes are obfuscated by the crowd.
+3. **Authorized settlement**: A contract-authorized solver pulls and unwraps each intent. Each individual amount becomes clear during this process, so the solver and chain observers can learn it at settlement.
+4. **Execution aggregation**: Same-pair intents can be combined into one pool interaction. The contract derives recipients, token addresses, and finalized input amounts from stored intents rather than trusting caller-supplied settlement data.
 5. **Auto Re-Shielding**: The public output tokens (e.g., sETH) are immediately re-wrapped into confidential tokens (cSETH) by the smart contract and distributed pro-rata to the users.
 
-At no point does the individual user's trade size or slippage enter the public mempool in plaintext. 
+The privacy boundary is explicit: inputs are private before settlement, become public for execution, and outputs return to confidential balances. Contract checks bind settlement to the submitted intent, an immutable owner-registered wrapper/underlying pair, and its proof-verified positive minimum output. Pulling moves the intent into `Settling`, which blocks cancellation; the intent owner can call `refundConfidential` before unwrap or `refundFinalized` after proof-finalization. The deployment owner remains privileged over new asset registrations, the solver allowlist, adapter, intent-book pointer, and token rescue.
 
 ---
 
@@ -38,9 +39,9 @@ At no point does the individual user's trade size or slippage enter the public m
 ShadowSwap consists of three core components:
 
 ### 1. Smart Contracts (Solidity)
-- **ShadowIntentBook.sol**: The ledger of encrypted intents. It manages intent states, batches, and complex iExec Nox ACL permissions (allowing only the Executor to act on the handles).
-- **ShadowSwapExecutor.sol**: The settlement engine. It unwraps the netted confidential tokens, performs the public swap via a `SwapAdapter`, and re-shields the outputs.
-- **ISwapAdapter.sol**: Abstract interface allowing the executor to plug into any public AMM (currently supporting Uniswap V2).
+- **ShadowIntentBook.sol**: The ledger of encrypted intents. It manages lifecycle, batches, owner/auditor viewing, and the wrapper/executor ACL needed for settlement.
+- **ShadowSwapExecutor.sol**: The authorized settlement engine. It unwraps confidential tokens, performs the public swap via a `SwapAdapter`, and re-shields outputs to intent owners.
+- **ISwapAdapter.sol**: Abstract public-AMM interface. The repository deployment currently uses `SimpleAMM`, a demo constant-product venue rather than production liquidity.
 
 ### 2. Frontend (Next.js)
 - A sleek, terminal-inspired dark-mode UI built with Next.js, Wagmi, and Viem.
@@ -95,4 +96,4 @@ ShadowSwap consists of three core components:
 ---
 
 ## 💡 Hackathon Note
-This project was built from scratch to demonstrate the power of FHE applied to decentralized finance. By combining confidential state with public AMM liquidity, ShadowSwap proves that we don't need to rebuild Uniswap from the ground up to achieve MEV resistance and privacy—we just need to shield the intents. 
+This project demonstrates a narrower, falsifiable claim: FHE handles can hide swap parameters while intents rest, selectively disclose them through ACLs, and bridge into a public AMM settlement that re-shields the output. Public execution and its MEV exposure remain visible limitations.

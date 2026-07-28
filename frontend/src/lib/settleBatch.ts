@@ -11,7 +11,7 @@
  */
 import type { Address, Hash, Hex, PublicClient, WalletClient } from "viem";
 import { executorAbi, intentBookAbi } from "@/lib/abis";
-import { decryptHandle } from "@/lib/nox";
+
 import {
   parsePulledAmountHandle,
   parseUnwrapRequestId,
@@ -39,6 +39,7 @@ export type IntentClearAmounts = {
   minOutHandle: Hex;
   amountInClear: bigint;
   minOutClear: bigint;
+  minOutDecryptProof?: Hex;
   status: number;
   batchId: number;
 };
@@ -194,7 +195,12 @@ export async function unwrapIntentToClearWithBook(params: {
   intentId: bigint;
   minOutOverride?: bigint;
   onLog: (line: string) => void;
-}): Promise<{ amountInClear: bigint; minOutClear: bigint; meta: IntentClearAmounts }> {
+}): Promise<{
+  amountInClear: bigint;
+  minOutClear: bigint;
+  minOutDecryptProof: Hex;
+  meta: IntentClearAmounts;
+}> {
   const {
     publicClient,
     walletClient,
@@ -211,25 +217,7 @@ export async function unwrapIntentToClearWithBook(params: {
     throw new Error(`Intent #${intentId} not settleable (status=${intent.status})`);
   }
 
-  // Resolve clear amount via private decrypt (user ACL on intent handles)
-  onLog(`Intent #${intentId}: private-decrypt amountIn…`);
-  const { value: amountPlain } = await decryptHandle(walletClient, intent.amountIn);
-  let amountInClear = amountPlain as bigint;
-  onLog(`  amountIn=${amountInClear}`);
-
-  let minOutClear = minOutOverride;
-  if (minOutClear == null) {
-    try {
-      const { value } = await decryptHandle(walletClient, intent.minAmountOut);
-      minOutClear = value as bigint;
-      onLog(`  minOut=${minOutClear}`);
-    } catch (e) {
-      onLog(
-        `  minOut decrypt failed (${e instanceof Error ? e.message.slice(0, 60) : e}) — using 0`
-      );
-      minOutClear = 0n;
-    }
-  }
+  let amountInClear = 0n;
 
   onLog(`Intent #${intentId}: pullFromIntent.`);
   const pullTx = await write({
@@ -244,6 +232,17 @@ export async function unwrapIntentToClearWithBook(params: {
   }
   const pulledAmountHandle = parsePulledAmountHandle(pullReceipt.logs as never, executor);
   onLog(`  pull tx ${pullTx.slice(0, 10)}.`);
+
+  onLog(`Intent #${intentId}: publicDecrypt submitted minOut…`);
+  const minOutResult = await publicDecryptWithRetry(walletClient, intent.minAmountOut);
+  const minOutClear = minOutResult.value;
+  if (minOutClear <= 0n) {
+    throw new Error(`Intent #${intentId} minOut must be greater than 0`);
+  }
+  if (minOutOverride != null && minOutOverride !== minOutClear) {
+    throw new Error(`Intent #${intentId} minOut does not match the expected override`);
+  }
+  onLog(`  minOut=${minOutClear} (proof-bound)`);
 
   onLog(`Intent #${intentId}: startUnwrapHeld…`);
   const unwrapTx = await write({
@@ -285,6 +284,7 @@ export async function unwrapIntentToClearWithBook(params: {
   return {
     amountInClear,
     minOutClear,
+    minOutDecryptProof: minOutResult.decryptionProof,
     meta: {
       intentId,
       user: intent.user,
@@ -382,7 +382,7 @@ export async function runBatchSettlement(params: {
       state = emit(
         pushLog(
           state,
-          "Note: only 1 intent — netting demo is stronger with ≥2 same-pair intents."
+          "Note: only 1 intent — aggregation is visible with ≥2 same-pair intents."
         )
       );
     }
@@ -442,7 +442,7 @@ export async function runBatchSettlement(params: {
         log: [...state.log, `—— Intent ${i + 1}/${intentIds.length} (#${id}) ——`],
       });
 
-      const { amountInClear, minOutClear, meta } = await unwrapIntentToClearWithBook({
+      const { amountInClear, minOutClear, minOutDecryptProof, meta } = await unwrapIntentToClearWithBook({
         publicClient,
         walletClient,
         write,
@@ -454,7 +454,7 @@ export async function runBatchSettlement(params: {
           state = emit(pushLog(state, line));
         },
       });
-      clears.push({ ...meta, amountInClear, minOutClear, batchId });
+      clears.push({ ...meta, amountInClear, minOutClear, minOutDecryptProof, batchId });
     }
 
     const netIn = clears.reduce((a, c) => a + c.amountInClear, 0n);
@@ -484,12 +484,10 @@ export async function runBatchSettlement(params: {
       args: [
         batchId,
         clears.map((c) => c.intentId),
-        clears.map((c) => c.user),
-        first.cTokenOut,
-        first.tokenIn,
-        first.tokenOut,
-        clears.map((c) => c.amountInClear),
-        clears.map((c) => c.minOutClear),
+        clears.map((c) => {
+          if (!c.minOutDecryptProof) throw new Error(`Missing minOut proof for intent #${c.intentId}`);
+          return c.minOutDecryptProof;
+        }),
         deadline,
       ],
     });

@@ -1,8 +1,8 @@
 # Next steps to ship (before Aug 1)
 
-## Deployed on Sepolia ✅ (2026-07-22)
+## Hardened Sepolia redeploy required
 
-Addresses in `deployments/sepolia.json` / `frontend/src/lib/deployments.json`.
+Addresses in `deployments/sepolia.json` / `frontend/src/lib/deployments.json` are the legacy deployment. The frontend keeps transactional controls disabled until a v2 deployment manifest is generated.
 
 1. **Pin Handle SDK** (required — older versions deprecated):
    ```bash
@@ -41,7 +41,7 @@ Desk path: faucet → wrap → operator → encrypted intent → **Run solo sett
 ```bash
 cd contracts
 # after deploy + user has submitted an intent with operator set
-INTENT_ID=1 MIN_OUT=0 npx hardhat run scripts/settle-solo.ts --network sepolia
+INTENT_ID=1 npx hardhat run scripts/settle-solo.ts --network sepolia
 ```
 
 Code: `frontend/src/lib/settleSolo.ts`, `contracts/scripts/settle-solo.ts`.
@@ -53,7 +53,7 @@ Code: `frontend/src/lib/settleSolo.ts`, `contracts/scripts/settle-solo.ts`.
 1. Preview batch membership / same-pair cohort  
 2. Optional seal  
 3. Per-intent unwrap (pull → unwrap → publicDecrypt → finalize)  
-4. `executeBatchSamePair` — one AMM swap, pro-rata cTokenOut  
+4. `executeBatchSamePair` — one demo-AMM swap, pro-rata cTokenOut; individual inputs were already revealed by per-intent public decryption
 
 Requires each intent owner to have set executor as operator on their cTokenIn.
 

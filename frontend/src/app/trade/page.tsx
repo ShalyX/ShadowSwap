@@ -94,10 +94,10 @@ export default function TradePage() {
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              TEE Enclave State
+              Nox Network
             </div>
             <div className="mono" style={{ fontSize: "0.82rem", color: "var(--aurora-start)", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span className="pulse-dot" /> Nox KMS Online
+              <span className="pulse-dot" /> Sepolia KMS Configured
             </div>
           </div>
 
@@ -115,7 +115,7 @@ export default function TradePage() {
             }}
             title="Toggle Admin/Solver Mode (Alt + A)"
           >
-            <SettingsIcon size={13} /> {isAdmin ? "Solver Mode Active" : "Alt+A Solver"}
+            <SettingsIcon size={13} /> {isAdmin ? "Solver Tools Visible" : "Alt+A Solver Tools"}
           </button>
         </div>
       </div>

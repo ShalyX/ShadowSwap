@@ -16,12 +16,13 @@ import {IERC7984} from "@iexec-nox/nox-confidential-contracts/contracts/interfac
  * - **Private until execution:** amountIn and minAmountOut live as Nox handles.
  * - **Public by design:** token pair, user, deadline, status (needed for routing UX).
  * - **Batch windows:** intents join an open batch; sealing freezes membership so a
- *   batch executor can net same-pair flow and reduce size attribution.
+ *   batch executor can aggregate same-pair flow into one pool interaction.
  * - **Selective disclosure:** intent owner can grant an auditor `addViewer` rights
  *   on amount handles without making them world-public.
  *
  * ## Lifecycle
- * Pending → (optional) Batched → Executed | Cancelled
+ * Pending → (optional) Batched → Settling → Executed | Refunded
+ * Pending → Cancelled
  */
 contract ShadowIntentBook {
     // ============ Types ============
@@ -31,7 +32,9 @@ contract ShadowIntentBook {
         Pending,
         Batched,
         Executed,
-        Cancelled
+        Cancelled,
+        Settling,
+        Refunded
     }
 
     struct Intent {
@@ -68,6 +71,7 @@ contract ShadowIntentBook {
     mapping(uint256 => Intent) public intents;
     mapping(uint32 => Batch) public batches;
     mapping(address => uint256[]) private _userIntents;
+    mapping(address => address) public registeredUnderlying;
 
     // ============ Events ============
 
@@ -86,6 +90,9 @@ contract ShadowIntentBook {
     event BatchSealed(uint32 indexed batchId, uint256 intentCount);
     event BatchOpened(uint32 indexed batchId, uint64 openAt);
     event IntentExecuted(uint256 indexed intentId, uint32 indexed batchId);
+    event IntentSettlementStarted(uint256 indexed intentId);
+    event IntentRefunded(uint256 indexed intentId);
+    event AssetPairRegistered(address indexed wrapper, address indexed underlying);
 
     // ============ Errors ============
 
@@ -99,6 +106,8 @@ contract ShadowIntentBook {
     error ZeroAddress();
     error BadDeadline();
     error SameToken();
+    error AssetPairNotRegistered();
+    error AssetPairAlreadyRegistered();
 
     // ============ Modifiers ============
 
@@ -139,6 +148,13 @@ contract ShadowIntentBook {
         owner = newOwner;
     }
 
+    function registerAssetPair(address wrapper, address underlying) external onlyOwner {
+        if (wrapper == address(0) || underlying == address(0)) revert ZeroAddress();
+        if (registeredUnderlying[wrapper] != address(0)) revert AssetPairAlreadyRegistered();
+        registeredUnderlying[wrapper] = underlying;
+        emit AssetPairRegistered(wrapper, underlying);
+    }
+
     // ============ Intent submission ============
 
     /**
@@ -167,6 +183,9 @@ contract ShadowIntentBook {
     ) external returns (uint256 intentId) {
         if (tokenIn == tokenOut) revert SameToken();
         if (cTokenIn == address(0) || cTokenOut == address(0)) revert ZeroAddress();
+        if (!isAssetPair(cTokenIn, tokenIn) || !isAssetPair(cTokenOut, tokenOut)) {
+            revert AssetPairNotRegistered();
+        }
         if (deadline <= block.timestamp) revert BadDeadline();
 
         // Ensure we have an open batch; auto-rotate if window elapsed and current has intents
@@ -205,14 +224,18 @@ contract ShadowIntentBook {
     }
 
     /**
-     * @notice Cancel a pending intent before it is sealed into an executed batch.
+     * @notice Cancel a pending intent, or an expired batched intent before settlement starts.
      */
     function cancelIntent(uint256 intentId) external {
         Intent storage intent = intents[intentId];
         if (intent.user != msg.sender) revert NotIntentOwner();
-        if (intent.status != IntentStatus.Pending) revert BadStatus();
+        if (
+            intent.status != IntentStatus.Pending &&
+            !(intent.status == IntentStatus.Batched && block.timestamp > intent.deadline)
+        ) revert BadStatus();
         intent.status = IntentStatus.Cancelled;
         emit IntentCancelled(intentId, msg.sender);
+        _refreshBatchExecuted(intent.batchId);
     }
 
     /**
@@ -259,6 +282,7 @@ contract ShadowIntentBook {
                 intent.status = IntentStatus.Batched;
             }
         }
+        _refreshBatchExecuted(sealedId);
 
         emit BatchSealed(sealedId, ids.length);
 
@@ -274,34 +298,54 @@ contract ShadowIntentBook {
     function markExecuted(uint256[] calldata intentIds, uint32 batchId) external onlyExecutor {
         for (uint256 i = 0; i < intentIds.length; i++) {
             Intent storage intent = intents[intentIds[i]];
-            if (intent.status != IntentStatus.Batched && intent.status != IntentStatus.Pending) {
-                continue;
-            }
+            if (intent.batchId != batchId) revert BadStatus();
+            if (intent.status != IntentStatus.Settling) revert BadStatus();
             intent.status = IntentStatus.Executed;
             emit IntentExecuted(intentIds[i], batchId);
         }
-        batches[batchId].isExecuted = true;
+
+        _refreshBatchExecuted(batchId);
+    }
+
+    function beginSettlement(uint256 intentId) external onlyExecutor {
+        Intent storage intent = intents[intentId];
+        if (intent.status != IntentStatus.Pending && intent.status != IntentStatus.Batched) {
+            revert BadStatus();
+        }
+        intent.status = IntentStatus.Settling;
+        emit IntentSettlementStarted(intentId);
+    }
+
+    function markRefunded(uint256 intentId) external onlyExecutor {
+        Intent storage intent = intents[intentId];
+        if (intent.status != IntentStatus.Settling) revert BadStatus();
+        intent.status = IntentStatus.Refunded;
+        emit IntentRefunded(intentId);
+
+        _refreshBatchExecuted(intent.batchId);
     }
 
     /**
-     * @notice Allow executor + cTokenIn to use intent amount handles during settlement.
+     * @notice Transiently allow executor + cTokenIn to use intent handles during settlement.
      * @dev cTokenIn must be ACL'd: confidentialTransferFrom runs Nox ops as the token contract
      *      and reverts NotAllowed(handle, cToken) otherwise.
      */
     function allowExecutorOnIntent(uint256 intentId) external onlyExecutor {
         Intent storage intent = intents[intentId];
-        Nox.allow(intent.amountIn, executor);
-        Nox.allow(intent.minAmountOut, executor);
-        Nox.allow(intent.amountIn, intent.cTokenIn);
         Nox.allowTransient(intent.amountIn, executor);
         Nox.allowTransient(intent.minAmountOut, executor);
         Nox.allowTransient(intent.amountIn, intent.cTokenIn);
     }
 
+
     // ============ Views ============
 
     function getIntent(uint256 intentId) external view returns (Intent memory) {
         return intents[intentId];
+    }
+
+    function isAssetPair(address wrapper, address underlying) public view returns (bool) {
+        return underlying != address(0) && registeredUnderlying[wrapper] == underlying;
     }
 
     function getBatchIntentIds(uint32 batchId) external view returns (uint256[] memory) {
@@ -338,10 +382,25 @@ contract ShadowIntentBook {
                 intent.status = IntentStatus.Batched;
             }
         }
+        _refreshBatchExecuted(currentBatchId);
         emit BatchSealed(currentBatchId, ids.length);
 
         currentBatchId += 1;
         batches[currentBatchId].openAt = uint64(block.timestamp);
         emit BatchOpened(currentBatchId, uint64(block.timestamp));
+    }
+
+    function _refreshBatchExecuted(uint32 batchId) internal {
+        Batch storage batch = batches[batchId];
+        bool allFinished = batch.isSealed && batch.intentIds.length != 0;
+        for (uint256 i = 0; i < batch.intentIds.length && allFinished; i++) {
+            IntentStatus status = intents[batch.intentIds[i]].status;
+            if (
+                status != IntentStatus.Executed &&
+                status != IntentStatus.Cancelled &&
+                status != IntentStatus.Refunded
+            ) allFinished = false;
+        }
+        batch.isExecuted = allFinished;
     }
 }

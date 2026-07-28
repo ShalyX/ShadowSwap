@@ -10,11 +10,12 @@
  *  - ShadowFaucet
  *
  * Env:
- *  PRIVATE_KEY, SEPOLIA_RPC_URL (for sepolia)
+ *  PRIVATE_KEY, SEPOLIA_RPC_URL (for sepolia), optional SOLVER_ADDRESS
  */
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import hre from "hardhat";
+import { isAddress } from "viem";
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -119,6 +120,8 @@ async function main() {
   const book = await viem.deployContract("ShadowIntentBook", [batchWindow], txOpts);
   console.log("  IntentBook:", book.address);
   await sleep(1500);
+  await waitTx("register cSUSD/sUSD", book.write.registerAssetPair([cTokenA.address, tokenA.address], txOpts));
+  await waitTx("register cSETH/sETH", book.write.registerAssetPair([cTokenB.address, tokenB.address], txOpts));
   const executor = await viem.deployContract(
     "ShadowSwapExecutor",
     [book.address, amm.address],
@@ -127,6 +130,13 @@ async function main() {
   console.log("  Executor:", executor.address);
   await sleep(1500);
   await waitTx("setExecutor", book.write.setExecutor([executor.address], txOpts));
+  const configuredSolver = process.env.SOLVER_ADDRESS;
+  if (configuredSolver) {
+    if (!isAddress(configuredSolver)) throw new Error("SOLVER_ADDRESS is not a valid address");
+    if (configuredSolver.toLowerCase() !== deployer.toLowerCase()) {
+      await waitTx("authorize solver", executor.write.setSolver([configuredSolver, true], txOpts));
+    }
+  }
 
   console.log("\n6) Faucet...");
   const faucet = await viem.deployContract(
@@ -171,6 +181,9 @@ async function main() {
       uniswapV2Router02Sepolia: "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3",
     },
     config: {
+      executorSecurityVersion: 2,
+      settlementVenue: "SimpleAMM demo",
+      solver: configuredSolver ?? deployer,
       batchWindowSeconds: Number(batchWindow),
       faucetAmounts: {
         sUSD: faucetA.toString(),

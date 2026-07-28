@@ -29,7 +29,7 @@
 | Contract | Role |
 |----------|------|
 | `MockERC20` | Demo sUSD / sETH |
-| `SimpleAMM` | Guaranteed liquidity + Uniswap-like API |
+| `SimpleAMM` | Demo constant-product venue with seeded test liquidity |
 | `ConfidentialWrappedToken` | ERC-20 ↔ ERC-7984 via Nox |
 | `ShadowIntentBook` | Encrypted intents, batch windows, auditor ACL |
 | `ShadowSwapExecutor` | Settlement against public AMM + re-shield |
@@ -49,7 +49,7 @@
 
 Implemented in UI (`settleSolo.ts` + Swap desk step 5) and CLI (`contracts/scripts/settle-solo.ts`).
 
-### B. Batch private swap (product path)
+### B. Batch execution aggregation
 
 1. Multiple users submit intents in the same window  
 2. Anyone seals after `batchWindow` (or owner anytime)  
@@ -57,6 +57,19 @@ Implemented in UI (`settleSolo.ts` + Swap desk step 5) and CLI (`contracts/scrip
 4. `executeBatchSamePair` — one AMM swap, pro-rata confidential outputs  
 
 UI: `BatchDesk` + `settleBatch.ts`.
+
+## Trust and authorization boundaries
+
+- The intent owner controls confidential-token operator approval and auditor viewer grants.
+- Only the owner or an authorized solver can pull and unwrap an intent; only an authorized solver can execute a batch.
+- Settlement recipients, pair addresses, and finalized input amounts are derived from stored intents. They are not caller-selected parameters.
+- Intent submission and settlement both require immutable owner-registered wrapper/underlying pairs, preventing one intent from selecting a different pooled ERC-20 balance.
+- Pulling transitions an intent to `Settling`, blocks cancellation, and permits completion after its submission deadline. Before unwrap, the user can recover confidential input; after proof-finalization, the user can re-wrap the underlying input through the refund path.
+- A sealed `Batched` intent that was never pulled becomes user-cancellable after its submission deadline, so expired operator approval cannot leave the batch permanently incomplete.
+- `minOut` must be positive and deadlines are enforced, but public-AMM execution is still exposed to ordinary MEV after decryption.
+- The solver observes individual clear amounts during settlement and can delay execution. Batch aggregation reduces pool interactions; it does not hide per-intent settlement values.
+- The deployment owner is privileged: it controls the solver allowlist, adapter and intent-book addresses, and ERC-20 rescue. v2 has no on-chain timelock or multisig requirement.
+- The checked-in Sepolia deployment is legacy. Frontend transaction controls require a manifest with `executorSecurityVersion: 2` before they become active.
 
 ## Repo layout
 

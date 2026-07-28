@@ -69,12 +69,7 @@ const EXECUTOR_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "intentId", type: "uint256" },
-      { name: "user", type: "address" },
-      { name: "cTokenOut", type: "address" },
-      { name: "tokenIn", type: "address" },
-      { name: "tokenOut", type: "address" },
-      { name: "amountInClear", type: "uint256" },
-      { name: "minOutClear", type: "uint256" },
+      { name: "minOutDecryptProof", type: "bytes" },
       { name: "deadline", type: "uint256" },
     ],
     outputs: [{ type: "uint256" }],
@@ -144,6 +139,7 @@ function loadDeployment() {
     if (existsSync(p)) {
       return JSON.parse(readFileSync(p, "utf8")) as {
         contracts: Record<string, string>;
+        config?: { executorSecurityVersion?: number };
       };
     }
   }
@@ -164,8 +160,8 @@ function parseEventField(
     });
     const match = events.find((e) => e.address.toLowerCase() === executor.toLowerCase());
     if (match && "args" in match) {
-      const v = (match.args as Record<string, Hex>)[field];
-      if (v) return v;
+      const v = (match.args as unknown as Record<string, unknown>)[field];
+      if (typeof v === "string" && v.startsWith("0x")) return v as Hex;
     }
   } catch {
     /* fall through */
@@ -178,8 +174,8 @@ function parseEventField(
         topics: log.topics as [Hex, ...Hex[]],
       });
       if (d.eventName === eventName) {
-        const v = (d.args as Record<string, Hex>)[field];
-        if (v) return v;
+        const v = (d.args as unknown as Record<string, unknown>)[field];
+        if (typeof v === "string" && v.startsWith("0x")) return v as Hex;
       }
     } catch {
       /* skip */
@@ -194,6 +190,9 @@ async function sleep(ms: number) {
 
 async function main() {
   const dep = loadDeployment();
+  if (dep.config?.executorSecurityVersion !== 2) {
+    throw new Error("Refusing settlement: deployment is not executor security version 2");
+  }
   const executor = dep.contracts.executor as Address;
   const intentBook = dep.contracts.intentBook as Address;
   if (!executor || executor === "0x0000000000000000000000000000000000000000") {
@@ -332,6 +331,14 @@ async function main() {
     throw lastErr instanceof Error ? lastErr : new Error("publicDecrypt failed");
   }
 
+  console.log("  publicDecrypt submitted minOut...");
+  const minOutResult = await handleClient.publicDecrypt(intent.minAmountOut as never);
+  const minOutClear = minOutResult.value as bigint;
+  if (minOutClear <= 0n) throw new Error("Submitted minOut must be positive");
+  if (process.env.MIN_OUT && BigInt(process.env.MIN_OUT) !== minOutClear) {
+    throw new Error("MIN_OUT does not match the encrypted intent value");
+  }
+
   // 4) Finalize
   console.log("\n4) finalizeUnwrapForIntent…");
   const finHash = await walletClient.writeContract({
@@ -343,12 +350,6 @@ async function main() {
   await publicClient.waitForTransactionReceipt({ hash: finHash });
   console.log("  tx:", finHash);
 
-  // minOut: optional MIN_OUT env, else 0 (demo only — set MIN_OUT for real slippage)
-  const minOutClear = process.env.MIN_OUT ? BigInt(process.env.MIN_OUT) : 0n;
-  if (minOutClear === 0n) {
-    console.warn("  WARN: MIN_OUT=0 — sandwichable; set MIN_OUT for production demos");
-  }
-
   // 5) Execute
   console.log("\n5) executeSoloAfterUnwrap…");
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
@@ -356,16 +357,7 @@ async function main() {
     address: executor,
     abi: EXECUTOR_ABI,
     functionName: "executeSoloAfterUnwrap",
-    args: [
-      intentId,
-      intent.user,
-      intent.cTokenOut,
-      intent.tokenIn,
-      intent.tokenOut,
-      amountInClear,
-      minOutClear,
-      deadline,
-    ],
+    args: [intentId, minOutResult.decryptionProof as Hex, deadline],
   });
   await publicClient.waitForTransactionReceipt({ hash: execHash });
   console.log("  tx:", execHash);

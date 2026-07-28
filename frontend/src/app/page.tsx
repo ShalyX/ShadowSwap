@@ -13,6 +13,7 @@ export default function HomePage() {
   const contracts = deployments.contracts as Record<string, string>;
   const explorer = (deployments as { explorer?: string }).explorer ?? "https://sepolia.etherscan.io";
   const deployed =
+    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 2 &&
     contracts.intentBook &&
     contracts.intentBook !== "0x0000000000000000000000000000000000000000";
 
@@ -40,7 +41,7 @@ export default function HomePage() {
             <span className="pulse-dot" /> DARK FOREST THREAT MONITOR
           </span>
           <span style={{ color: "var(--muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <ShieldIcon size={14} color="var(--success)" /> MEV Sandwich Protection: <strong style={{ color: "var(--success)" }}>ACTIVE</strong>
+            <ShieldIcon size={14} color="var(--success)" /> Pre-Settlement Size Privacy: <strong style={{ color: "var(--success)" }}>ACTIVE</strong>
           </span>
           <span style={{ color: "var(--muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <LockIcon size={14} color="#7000FF" /> Nox TEE Enclave: <strong style={{ color: "#7000FF" }}>SEPOLIA KMS</strong>
@@ -54,7 +55,7 @@ export default function HomePage() {
       <section style={{ margin: "2rem 0 6rem", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
         <div className="badge badge-live" style={{ marginBottom: "2rem", padding: "0.55rem 1.4rem", fontSize: "0.85rem", letterSpacing: "0.05em", gap: "0.5rem" }}>
           <SparklesIcon size={14} color="var(--aurora-start)" /> WTF Hackathon · iExec Nox Protocol
-          {deployed ? " · Live on Sepolia" : ""}
+          {deployed ? " · Hardened v2 live on Sepolia" : " · Hardened redeploy pending"}
         </div>
 
         <h1
@@ -72,7 +73,7 @@ export default function HomePage() {
         </h1>
 
         <p style={{ color: "var(--muted)", maxWidth: 720, lineHeight: 1.7, fontSize: "1.2rem", marginTop: "2rem" }}>
-          ShadowSwap is an institutional-grade private routing layer for public AMMs. Encrypt your trades with Nox TEEs, pool them in a batchable intent book, and unshield only at execution.
+          ShadowSwap encrypts trade size and min-out while intents wait. Settlement publicly decrypts each input, then batches compatible flow into one demo-AMM trade. The checked-in Sepolia deployment remains paused until the hardened contracts are redeployed.
         </p>
         
         <div style={{ marginTop: "3rem", display: "flex", gap: "1.25rem", flexWrap: "wrap", justifyContent: "center" }}>
@@ -94,15 +95,15 @@ export default function HomePage() {
           maxWidth: 900
         }}>
           <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Mempool Leakage</div>
-            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--success)", marginTop: "0.2rem" }}>$0.00</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>100% encrypted Nox handles</div>
+            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Queued Trade Size</div>
+            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--success)", marginTop: "0.2rem" }}>Encrypted</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Nox handles until unwrap</div>
           </div>
 
           <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Sandwich Risk</div>
-            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--aurora-start)", marginTop: "0.2rem" }}>0%</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Protected vs MEV bots</div>
+            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Public Execution</div>
+            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--aurora-start)", marginTop: "0.2rem" }}>Visible</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Standard AMM MEV risk remains</div>
           </div>
 
           <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>

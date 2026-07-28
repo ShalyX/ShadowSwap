@@ -25,12 +25,12 @@ const STEP_LABEL: Record<BatchSettleStep, string> = {
   "load-batch": "Load batch",
   seal: "Seal batch",
   "per-intent": "Unwrap intents",
-  "execute-batch": "Net AMM swap",
+  "execute-batch": "Aggregate AMM swap",
   done: "Settled",
   error: "Error",
 };
 
-const STATUS = ["None", "Pending", "Batched", "Executed", "Cancelled"] as const;
+const STATUS = ["None", "Pending", "Batched", "Executed", "Cancelled", "Settling", "Refunded"] as const;
 
 function hasDeployed(addr?: string) {
   return !!addr && isAddress(addr) && addr !== zeroAddress;
@@ -47,7 +47,11 @@ export function BatchDesk() {
   const { writeContractAsync, isPending } = useWriteContract();
 
   const c = deployments.contracts as Record<string, string>;
-  const ready = hasDeployed(c.intentBook) && hasDeployed(c.executor);
+  const deploymentConfig = deployments.config as { executorSecurityVersion?: number };
+  const ready =
+    deploymentConfig.executorSecurityVersion === 2 &&
+    hasDeployed(c.intentBook) &&
+    hasDeployed(c.executor);
 
   const [batchIdInput, setBatchIdInput] = useState("");
   const [preview, setPreview] = useState<{
@@ -75,6 +79,14 @@ export function BatchDesk() {
     abi: intentBookAbi,
     functionName: "batchWindow",
     query: { enabled: ready },
+  });
+
+  const { data: isAuthorizedSolver } = useReadContract({
+    address: c.executor as Address,
+    abi: executorAbi,
+    functionName: "authorizedSolvers",
+    args: [address as Address],
+    query: { enabled: ready && !!address },
   });
 
   const effectiveBatchId = useMemo(() => {
@@ -126,6 +138,10 @@ export function BatchDesk() {
   }
 
   const sealBatch = async () => {
+    if (!ready || !isConnected) {
+      setStatus("Hardened batch transactions are unavailable on this deployment");
+      return;
+    }
     setBusy(true);
     try {
       setStatus("Sealing current batch…");
@@ -146,8 +162,16 @@ export function BatchDesk() {
   };
 
   const runBatch = async () => {
+    if (!ready) {
+      setStatus("Hardened batch transactions are unavailable on this deployment");
+      return;
+    }
     if (!walletClient || !publicClient || !address) {
       setStatus("Connect wallet");
+      return;
+    }
+    if (!isAuthorizedSolver) {
+      setStatus("This wallet is not authorized to run batch settlement");
       return;
     }
     if (effectiveBatchId == null) {
@@ -276,7 +300,7 @@ export function BatchDesk() {
           <button className="btn btn-ghost" disabled={!ready || busy} onClick={loadPreview}>
             Preview
           </button>
-          <button className="btn btn-ghost" disabled={!isConnected || busy} onClick={sealBatch}>
+          <button className="btn btn-ghost" disabled={!ready || !isConnected || busy} onClick={sealBatch}>
             Seal
           </button>
         </div>
@@ -308,7 +332,7 @@ export function BatchDesk() {
             {preview.intents.length === 0 ? (
               <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: 0 }}>
                 No Pending/Batched intents. Submit encrypted intents on the swap desk first (same
-                direction helps netting).
+                direction enables one aggregate pool interaction).
               </p>
             ) : (
               <div style={{ display: "grid", gap: "0.4rem" }}>
@@ -351,13 +375,13 @@ export function BatchDesk() {
             <div style={{ marginTop: "0.85rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <button
                 className="btn btn-primary"
-                disabled={!isConnected || busy || preview.intents.length === 0 || preview.isExecuted}
+                disabled={!ready || !isConnected || !isAuthorizedSolver || busy || preview.intents.length === 0 || preview.isExecuted}
                 onClick={runBatch}
               >
                 {busy ? "Settling batch…" : "Run batch settle"}
               </button>
               <span style={{ color: "var(--muted)", fontSize: "0.78rem", alignSelf: "center" }}>
-                Requires each user set executor as operator on their cTokenIn.
+                Requires an on-chain authorized solver wallet and active user operator grants.
               </span>
             </div>
           </div>

@@ -21,12 +21,7 @@ const EXECUTOR_ABI = [
     inputs: [
       { name: "batchId", type: "uint32" },
       { name: "intentIds", type: "uint256[]" },
-      { name: "users", type: "address[]" },
-      { name: "cTokenOut", type: "address" },
-      { name: "tokenIn", type: "address" },
-      { name: "tokenOut", type: "address" },
-      { name: "amountIns", type: "uint256[]" },
-      { name: "minOuts", type: "uint256[]" },
+      { name: "minOutDecryptProofs", type: "bytes[]" },
       { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "netOut", type: "uint256" }],
@@ -133,6 +128,7 @@ function loadDeployment() {
     if (existsSync(p)) {
       return JSON.parse(readFileSync(p, "utf8")) as {
         contracts: Record<string, string>;
+        config?: { executorSecurityVersion?: number };
       };
     }
   }
@@ -153,8 +149,8 @@ function parseEventField(
     });
     const match = events.find((e) => e.address.toLowerCase() === executor.toLowerCase());
     if (match && "args" in match) {
-      const v = (match.args as Record<string, Hex>)[field];
-      if (v) return v;
+      const v = (match.args as unknown as Record<string, unknown>)[field];
+      if (typeof v === "string" && v.startsWith("0x")) return v as Hex;
     }
   } catch {
     /* fall through */
@@ -167,8 +163,8 @@ function parseEventField(
         topics: log.topics as [Hex, ...Hex[]],
       });
       if (d.eventName === eventName) {
-        const v = (d.args as Record<string, Hex>)[field];
-        if (v) return v;
+        const v = (d.args as unknown as Record<string, unknown>)[field];
+        if (typeof v === "string" && v.startsWith("0x")) return v as Hex;
       }
     } catch {
       /* skip */
@@ -183,6 +179,9 @@ async function sleep(ms: number) {
 
 async function main() {
   const dep = loadDeployment();
+  if (dep.config?.executorSecurityVersion !== 2) {
+    throw new Error("Refusing settlement: deployment is not executor security version 2");
+  }
   const executor = dep.contracts.executor as Address;
   const intentBook = dep.contracts.intentBook as Address;
   if (!executor || executor === "0x0000000000000000000000000000000000000000") {
@@ -225,6 +224,7 @@ async function main() {
       });
 
       const pendingIntents: Array<{ id: bigint; data: any }> = [];
+      const now = BigInt(Math.floor(Date.now() / 1000));
 
       // Look at all intents we haven't confirmed are Executed/Cancelled
       // For simplicity, we just look at the last 50 intents max.
@@ -239,19 +239,36 @@ async function main() {
           functionName: "getIntent",
           args: [i],
         });
-        // status 1 = Pending
-        if (intent.status === 1) {
+        // status 1 = Pending, 2 = Batched
+        if ((intent.status === 1 || intent.status === 2) && intent.deadline >= now) {
           pendingIntents.push({ id: i, data: intent });
         }
       }
 
       if (pendingIntents.length > 0) {
-        console.log(`Found ${pendingIntents.length} pending intents. Batching...`);
+        console.log(`Found ${pendingIntents.length} pending/batched intents.`);
+
+        if (pendingIntents.some((intent) => intent.data.status === 1)) {
+          console.log("Sealing current batch once...");
+          const sealTx = await walletClient.writeContract({
+            address: intentBook,
+            abi: BOOK_ABI,
+            functionName: "sealCurrentBatch",
+            args: [],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: sealTx });
+        }
         
-        // Group by (cTokenIn-tokenOut)
+        // Group by batch and every field required to match in executeBatchSamePair.
         const groups: Record<string, typeof pendingIntents> = {};
         for (const intent of pendingIntents) {
-          const key = `${intent.data.cTokenIn}-${intent.data.tokenOut}`;
+          const key = [
+            intent.data.batchId,
+            intent.data.cTokenIn,
+            intent.data.cTokenOut,
+            intent.data.tokenIn,
+            intent.data.tokenOut,
+          ].join("-").toLowerCase();
           if (!groups[key]) groups[key] = [];
           groups[key].push(intent);
         }
@@ -260,6 +277,7 @@ async function main() {
         for (const [key, group] of Object.entries(groups)) {
           console.log(`\n📦 Processing batch for pair ${key} (${group.length} intents)`);
           const intentIds = group.map((i) => i.id);
+          const batchId = group[0].data.batchId;
 
           try {
             // 0. Initialize executor balance if needed
@@ -277,29 +295,8 @@ async function main() {
               console.log("  Executor balance initialized.");
             }
 
-            // 1. Seal Batch
-            console.log(`  Sealing batch...`);
-            const sealTx = await walletClient.writeContract({
-              address: intentBook,
-              abi: BOOK_ABI,
-              functionName: "sealCurrentBatch",
-              args: [],
-            });
-            const sealReceipt = await publicClient.waitForTransactionReceipt({ hash: sealTx });
-            // Extract batchId from receipt (quick hack, just read intent's batchId after)
-            const updatedIntent = await publicClient.readContract({
-              address: intentBook,
-              abi: BOOK_ABI,
-              functionName: "getIntent",
-              args: [intentIds[0]],
-            });
-            const batchId = updatedIntent.batchId;
-            console.log(`  Batch sealed. batchId: ${batchId}`);
-
-            // 2. Process each intent
-            const users: Address[] = [];
-            const amountIns: bigint[] = [];
-            const minOuts: bigint[] = [];
+            // Process each intent
+            const minOutProofs: Hex[] = [];
 
             for (let idx = 0; idx < group.length; idx++) {
               const intent = group[idx];
@@ -315,6 +312,15 @@ async function main() {
               });
               const pullReceipt = await publicClient.waitForTransactionReceipt({ hash: pullHash });
               const pulled = parseEventField(pullReceipt.logs as never, "ConfidentialPulled", "amount", executor);
+
+              // Pull marks the submitted min-out handle publicly decryptable. The
+              // executor verifies this proof instead of trusting a solver-supplied floor.
+              const minOutResult = await handleClient.publicDecrypt(
+                intent.data.minAmountOut as never
+              );
+              if ((minOutResult.value as bigint) <= 0n) {
+                throw new Error(`Intent #${intent.id} has invalid minOut`);
+              }
               
               // Unwrap
               console.log(`     startUnwrapHeld...`);
@@ -355,9 +361,7 @@ async function main() {
               });
               await publicClient.waitForTransactionReceipt({ hash: finHash });
 
-              users.push(intent.data.user);
-              amountIns.push(amountInClear);
-              minOuts.push(0n); // using 0 for minOut for simplicity, real bot would decrypt minAmountOut too
+              minOutProofs.push(minOutResult.decryptionProof as Hex);
             }
 
             // 3. Execute Batch
@@ -370,12 +374,7 @@ async function main() {
               args: [
                 batchId,
                 intentIds,
-                users,
-                group[0].data.cTokenOut,
-                group[0].data.tokenIn,
-                group[0].data.tokenOut,
-                amountIns,
-                minOuts,
+                minOutProofs,
                 deadline
               ],
             });

@@ -13,7 +13,7 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "ShadowSwap — Private AMM Routing on Nox",
   description:
-    "Route Uniswap-style swaps through iExec Nox: encrypted sizes, batch netting, auditor ACL. WTF Hackathon Summer Edition.",
+    "Route demo AMM swaps through iExec Nox: encrypted resting parameters, same-pair aggregation, and auditor ACL.",
   icons: {
     icon: "/logo.jpg",
   },
