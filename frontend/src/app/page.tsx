@@ -73,7 +73,7 @@ export default function HomePage() {
         </h1>
 
         <p style={{ color: "var(--muted)", maxWidth: 720, lineHeight: 1.7, fontSize: "1.2rem", marginTop: "2rem" }}>
-          ShadowSwap encrypts trade size and min-out while intents wait. Settlement publicly decrypts each input, then batches compatible flow into one demo-AMM trade. The checked-in Sepolia deployment remains paused until the hardened contracts are redeployed.
+          ShadowSwap encrypts trade size and min-out while intents wait. Settlement publicly decrypts each input, then batches compatible flow into one demo-AMM trade. The hardened Sepolia deployment is live for end-to-end testing.
         </p>
         
         <div style={{ marginTop: "3rem", display: "flex", gap: "1.25rem", flexWrap: "wrap", justifyContent: "center" }}>
