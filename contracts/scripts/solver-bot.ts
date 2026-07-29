@@ -1,6 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import hre from "hardhat";
 import {
   createWalletClient,
   createPublicClient,
@@ -12,6 +11,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
+import { decideOpenBatch, nextIntentSettlementStep } from "./lib/solver-policy.js";
 
 const EXECUTOR_ABI = [
   {
@@ -55,6 +55,34 @@ const EXECUTOR_ABI = [
       { name: "decryptedAmountAndProof", type: "bytes" },
     ],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "authorizedSolvers",
+    stateMutability: "view",
+    inputs: [{ name: "solver", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "lastPulledAmount",
+    stateMutability: "view",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "unwrapRequestForIntent",
+    stateMutability: "view",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "finalizedAmountIn",
+    stateMutability: "view",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
   },
   {
     type: "event",
@@ -107,6 +135,32 @@ const BOOK_ABI = [
           { name: "status", type: "uint8" },
         ],
       },
+    ],
+  },
+  {
+    type: "function",
+    name: "currentBatchId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint32" }],
+  },
+  {
+    type: "function",
+    name: "batchWindow",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint64" }],
+  },
+  {
+    type: "function",
+    name: "batches",
+    stateMutability: "view",
+    inputs: [{ name: "batchId", type: "uint32" }],
+    outputs: [
+      { name: "openAt", type: "uint64" },
+      { name: "sealAt", type: "uint64" },
+      { name: "isSealed", type: "bool" },
+      { name: "isExecuted", type: "bool" },
     ],
   },
   {
@@ -198,6 +252,21 @@ async function main() {
   const transport = http(rpc);
   const walletClient = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });
+  const isAuthorized = await publicClient.readContract({
+    address: executor,
+    abi: EXECUTOR_ABI,
+    functionName: "authorizedSolvers",
+    args: [account.address],
+  });
+  if (!isAuthorized) {
+    throw new Error(`Configured signer ${account.address} is not an authorized solver`);
+  }
+  const chainId = await publicClient.getChainId();
+  if (chainId !== sepolia.id) throw new Error(`Refusing unexpected chain id ${chainId}`);
+  const minimumGasWei = BigInt(process.env.SOLVER_MIN_GAS_WEI || "1000000000000000");
+  const pollMs = Number(process.env.SOLVER_POLL_MS || "15000");
+  const maxScan = BigInt(process.env.SOLVER_MAX_SCAN || "200");
+  if (!Number.isSafeInteger(pollMs) || pollMs < 5000) throw new Error("SOLVER_POLL_MS must be an integer >= 5000");
 
   console.log("🤖 ShadowSwap Solver Bot Initialized");
   console.log("Signer:", account.address);
@@ -215,183 +284,236 @@ async function main() {
 
   console.log("Starting polling loop...\n");
 
+  const decryptWithRetry = async (handle: Hex) => {
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      try {
+        return await handleClient.publicDecrypt(handle as never);
+      } catch (error) {
+        const message = error instanceof Error ? error.message.slice(0, 140) : String(error);
+        console.warn(`decrypt attempt ${attempt}/10 failed: ${message}`);
+        if (attempt === 10) throw error;
+        await sleep(2000 * Math.pow(2, Math.min(attempt - 1, 3)));
+      }
+    }
+    throw new Error("publicDecrypt exhausted retries");
+  };
+  const zeroHandle = `0x${"0".repeat(64)}`.toLowerCase();
+
   while (true) {
     try {
-      const nextIntentId = await publicClient.readContract({
+      const gasBalance = await publicClient.getBalance({ address: account.address });
+      if (gasBalance < minimumGasWei) {
+        console.error(`Solver paused: gas balance ${gasBalance} is below floor ${minimumGasWei}`);
+        await sleep(pollMs);
+        continue;
+      }
+
+      const [nextIntentId, currentBatchId, batchWindow] = await Promise.all([
+        publicClient.readContract({ address: intentBook, abi: BOOK_ABI, functionName: "nextIntentId" }),
+        publicClient.readContract({ address: intentBook, abi: BOOK_ABI, functionName: "currentBatchId" }),
+        publicClient.readContract({ address: intentBook, abi: BOOK_ABI, functionName: "batchWindow" }),
+      ]);
+      const currentBatch = await publicClient.readContract({
         address: intentBook,
         abi: BOOK_ABI,
-        functionName: "nextIntentId",
+        functionName: "batches",
+        args: [currentBatchId],
       });
 
-      const pendingIntents: Array<{ id: bigint; data: any }> = [];
+      const activeIntents: Array<{ id: bigint; data: any }> = [];
       const now = BigInt(Math.floor(Date.now() / 1000));
-
-      // Look at all intents we haven't confirmed are Executed/Cancelled
-      // For simplicity, we just look at the last 50 intents max.
-      // We subtract 1 because nextIntentId is the next ID to be assigned.
       const maxIntentId = nextIntentId > 0n ? nextIntentId - 1n : 0n;
-      const start = maxIntentId > 50n ? maxIntentId - 50n : 1n;
-      
-      for (let i = start; i <= maxIntentId; i++) {
+      const startId = maxIntentId >= maxScan ? maxIntentId - maxScan + 1n : 1n;
+
+      for (let intentId = startId; intentId <= maxIntentId; intentId++) {
         const intent = await publicClient.readContract({
           address: intentBook,
           abi: BOOK_ABI,
           functionName: "getIntent",
-          args: [i],
+          args: [intentId],
         });
-        // status 1 = Pending, 2 = Batched
-        if ((intent.status === 1 || intent.status === 2) && intent.deadline >= now) {
-          pendingIntents.push({ id: i, data: intent });
-        }
+        const status = Number(intent.status);
+        const freshQueued = (status === 1 || status === 2) && intent.deadline >= now;
+        const recoverable = status === 5;
+        if (freshQueued || recoverable) activeIntents.push({ id: intentId, data: intent });
       }
 
-      if (pendingIntents.length > 0) {
-        console.log(`Found ${pendingIntents.length} pending/batched intents.`);
+      const pairKey = (row: { data: any }) => [
+        row.data.batchId,
+        row.data.cTokenIn,
+        row.data.cTokenOut,
+        row.data.tokenIn,
+        row.data.tokenOut,
+      ].join("-").toLowerCase();
 
-        if (pendingIntents.some((intent) => intent.data.status === 1)) {
-          console.log("Sealing current batch once...");
-          const sealTx = await walletClient.writeContract({
-            address: intentBook,
-            abi: BOOK_ABI,
-            functionName: "sealCurrentBatch",
-            args: [],
-          });
-          await publicClient.waitForTransactionReceipt({ hash: sealTx });
-        }
-        
-        // Group by batch and every field required to match in executeBatchSamePair.
-        const groups: Record<string, typeof pendingIntents> = {};
-        for (const intent of pendingIntents) {
-          const key = [
-            intent.data.batchId,
-            intent.data.cTokenIn,
-            intent.data.cTokenOut,
-            intent.data.tokenIn,
-            intent.data.tokenOut,
-          ].join("-").toLowerCase();
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(intent);
-        }
+      const currentPending = activeIntents.filter(
+        (row) => Number(row.data.status) === 1 && Number(row.data.batchId) === Number(currentBatchId)
+      );
+      const currentPairCounts = new Map<string, number>();
+      for (const row of currentPending) {
+        const key = pairKey(row);
+        currentPairCounts.set(key, (currentPairCounts.get(key) || 0) + 1);
+      }
+      const largestCompatibleGroup = Math.max(0, ...currentPairCounts.values());
+      const [openAt, , isSealed] = currentBatch;
+      const sealDecision = isSealed ? "wait" : decideOpenBatch({
+        compatibleCount: largestCompatibleGroup,
+        openAt,
+        windowSeconds: batchWindow,
+        now,
+      });
+      let sealedNow = false;
+      if (sealDecision === "seal") {
+        console.log(`Sealing batch ${currentBatchId}: ${largestCompatibleGroup} compatible intent(s)`);
+        const sealHash = await walletClient.writeContract({
+          address: intentBook,
+          abi: BOOK_ABI,
+          functionName: "sealCurrentBatch",
+          args: [],
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: sealHash });
+        if (receipt.status !== "success") throw new Error(`Batch seal reverted: ${sealHash}`);
+        sealedNow = true;
+        console.log(`Batch ${currentBatchId} sealed: ${sealHash}`);
+      } else if (currentPending.length > 0 && !isSealed) {
+        const age = now > openAt ? now - openAt : 0n;
+        console.log(`Batch ${currentBatchId} remains open: ${largestCompatibleGroup} compatible, age ${age}/${batchWindow}s`);
+      }
 
-        // Execute each group
-        for (const [key, group] of Object.entries(groups)) {
-          console.log(`\n📦 Processing batch for pair ${key} (${group.length} intents)`);
-          const intentIds = group.map((i) => i.id);
-          const batchId = group[0].data.batchId;
+      const processable = activeIntents.filter((row) => {
+        const status = Number(row.data.status);
+        if (status === 2 || status === 5) return true;
+        return status === 1 && sealedNow && Number(row.data.batchId) === Number(currentBatchId);
+      });
+      const groups: Record<string, typeof processable> = {};
+      for (const row of processable) (groups[pairKey(row)] ||= []).push(row);
 
-          try {
-            // 0. Initialize executor balance if needed
-            const cTokenIn = group[0].data.cTokenIn;
-            if (!initializedTokens.has(cTokenIn)) {
-              console.log(`  Initializing executor balance in ${cTokenIn}...`);
-              const initTx = await walletClient.writeContract({
-                address: cTokenIn,
-                abi: [{ type: "function", name: "wrap", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] }],
-                functionName: "wrap",
-                args: [executor, 0n],
-              });
-              await publicClient.waitForTransactionReceipt({ hash: initTx });
-              initializedTokens.add(cTokenIn);
-              console.log("  Executor balance initialized.");
+      for (const [key, group] of Object.entries(groups)) {
+        console.log(`Processing ${key}: ${group.length} intent(s)`);
+        try {
+          const cTokenIn = group[0].data.cTokenIn as Address;
+          const operatorAbi = [{
+            type: "function",
+            name: "isOperator",
+            stateMutability: "view",
+            inputs: [{ name: "holder", type: "address" }, { name: "spender", type: "address" }],
+            outputs: [{ type: "bool" }],
+          }] as const;
+          for (const row of group) {
+            if (Number(row.data.status) === 5) continue;
+            const hasGrant = await publicClient.readContract({
+              address: cTokenIn,
+              abi: operatorAbi,
+              functionName: "isOperator",
+              args: [row.data.user as Address, executor],
+            });
+            if (!hasGrant) {
+              throw new Error(`Intent #${row.id} is waiting for its user to renew the executor operator grant`);
             }
+          }
+          if (!initializedTokens.has(cTokenIn.toLowerCase())) {
+            const initHash = await walletClient.writeContract({
+              address: cTokenIn,
+              abi: [{ type: "function", name: "wrap", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "uint256" }] }],
+              functionName: "wrap",
+              args: [executor, 0n],
+            });
+            const initReceipt = await publicClient.waitForTransactionReceipt({ hash: initHash });
+            if (initReceipt.status !== "success") throw new Error(`Executor balance initialization reverted: ${initHash}`);
+            initializedTokens.add(cTokenIn.toLowerCase());
+          }
 
-            // Process each intent
-            const minOutProofs: Hex[] = [];
+          const intentIds: bigint[] = [];
+          const minOutProofs: Hex[] = [];
+          for (const row of group) {
+            const intent = await publicClient.readContract({
+              address: intentBook,
+              abi: BOOK_ABI,
+              functionName: "getIntent",
+              args: [row.id],
+            });
+            let [pulled, unwrapRequestId, finalizedAmount] = await Promise.all([
+              publicClient.readContract({ address: executor, abi: EXECUTOR_ABI, functionName: "lastPulledAmount", args: [row.id] }),
+              publicClient.readContract({ address: executor, abi: EXECUTOR_ABI, functionName: "unwrapRequestForIntent", args: [row.id] }),
+              publicClient.readContract({ address: executor, abi: EXECUTOR_ABI, functionName: "finalizedAmountIn", args: [row.id] }),
+            ]);
+            let step = nextIntentSettlementStep({
+              status: Number(intent.status),
+              pulled: pulled.toLowerCase() !== zeroHandle,
+              unwrapStarted: unwrapRequestId.toLowerCase() !== zeroHandle,
+              finalizedAmount,
+            });
+            console.log(`Intent #${row.id}: ${step}`);
 
-            for (let idx = 0; idx < group.length; idx++) {
-              const intent = group[idx];
-              console.log(`  -- Intent #${intent.id} --`);
-              
-              // Pull
-              console.log(`     pullFromIntent...`);
+            if (step === "pull") {
               const pullHash = await walletClient.writeContract({
                 address: executor,
                 abi: EXECUTOR_ABI,
                 functionName: "pullFromIntent",
-                args: [intent.id],
+                args: [row.id],
               });
               const pullReceipt = await publicClient.waitForTransactionReceipt({ hash: pullHash });
-              const pulled = parseEventField(pullReceipt.logs as never, "ConfidentialPulled", "amount", executor);
-
-              // Pull marks the submitted min-out handle publicly decryptable. The
-              // executor verifies this proof instead of trusting a solver-supplied floor.
-              const minOutResult = await handleClient.publicDecrypt(
-                intent.data.minAmountOut as never
-              );
-              if ((minOutResult.value as bigint) <= 0n) {
-                throw new Error(`Intent #${intent.id} has invalid minOut`);
-              }
-              
-              // Unwrap
-              console.log(`     startUnwrapHeld...`);
+              if (pullReceipt.status !== "success") throw new Error(`Intent #${row.id} pull reverted: ${pullHash}`);
+              pulled = parseEventField(pullReceipt.logs as never, "ConfidentialPulled", "amount", executor);
+              step = "start-unwrap";
+            }
+            if (step === "start-unwrap") {
               const unwrapHash = await walletClient.writeContract({
                 address: executor,
                 abi: EXECUTOR_ABI,
                 functionName: "startUnwrapHeld",
-                args: [intent.id, intent.data.cTokenIn, pulled],
+                args: [row.id, intent.cTokenIn, pulled],
               });
               const unwrapReceipt = await publicClient.waitForTransactionReceipt({ hash: unwrapHash });
-              const unwrapRequestId = parseEventField(unwrapReceipt.logs as never, "UnwrapStarted", "unwrapRequestId", executor);
-
-              // Decrypt
-              console.log(`     publicDecrypt via @iexec-nox/handle...`);
-              let amountInClear: bigint | undefined;
-              let decryptionProof: Hex | undefined;
-              for (let i = 1; i <= 10; i++) {
-                try {
-                  const res = await handleClient.publicDecrypt(unwrapRequestId as never);
-                  amountInClear = res.value as bigint;
-                  decryptionProof = res.decryptionProof as Hex;
-                  console.log(`       attempt ${i}: ok amountInClear=${amountInClear}`);
-                  break;
-                } catch (e) {
-                  console.log(`       attempt ${i}:`, e instanceof Error ? e.message.slice(0, 100) : e);
-                  await sleep(2000 * Math.pow(2, Math.min(i - 1, 3)));
-                }
-              }
-              if (amountInClear == null || !decryptionProof) throw new Error("publicDecrypt failed");
-
-              // Finalize
-              console.log(`     finalizeUnwrapForIntent...`);
-              const finHash = await walletClient.writeContract({
+              if (unwrapReceipt.status !== "success") throw new Error(`Intent #${row.id} unwrap start reverted: ${unwrapHash}`);
+              unwrapRequestId = parseEventField(unwrapReceipt.logs as never, "UnwrapStarted", "unwrapRequestId", executor);
+              step = "finalize-unwrap";
+            }
+            if (step === "finalize-unwrap") {
+              const amountResult = await decryptWithRetry(unwrapRequestId as Hex);
+              if ((amountResult.value as bigint) <= 0n) throw new Error(`Intent #${row.id} decrypted to a non-positive input`);
+              const finalizeHash = await walletClient.writeContract({
                 address: executor,
                 abi: EXECUTOR_ABI,
                 functionName: "finalizeUnwrapForIntent",
-                args: [intent.id, intent.data.cTokenIn, unwrapRequestId, decryptionProof],
+                args: [row.id, intent.cTokenIn, unwrapRequestId, amountResult.decryptionProof as Hex],
               });
-              await publicClient.waitForTransactionReceipt({ hash: finHash });
-
-              minOutProofs.push(minOutResult.decryptionProof as Hex);
+              const finalizeReceipt = await publicClient.waitForTransactionReceipt({ hash: finalizeHash });
+              if (finalizeReceipt.status !== "success") throw new Error(`Intent #${row.id} unwrap finalization reverted: ${finalizeHash}`);
+              finalizedAmount = amountResult.value as bigint;
+              step = "ready";
+            }
+            if (step !== "ready" || finalizedAmount <= 0n) {
+              throw new Error(`Intent #${row.id} is not safely resumable from its on-chain state`);
             }
 
-            // 3. Execute Batch
-            console.log(`  executeBatchSamePair...`);
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
-            const execHash = await walletClient.writeContract({
-              address: executor,
-              abi: EXECUTOR_ABI,
-              functionName: "executeBatchSamePair",
-              args: [
-                batchId,
-                intentIds,
-                minOutProofs,
-                deadline
-              ],
-            });
-            await publicClient.waitForTransactionReceipt({ hash: execHash });
-            console.log(`  ✅ Batch executed successfully! tx: ${execHash}`);
-
-          } catch (err) {
-            console.error(`  ❌ Batch failed:`, err);
+            const minOutResult = await decryptWithRetry(intent.minAmountOut as Hex);
+            if ((minOutResult.value as bigint) <= 0n) throw new Error(`Intent #${row.id} has invalid minOut`);
+            intentIds.push(row.id);
+            minOutProofs.push(minOutResult.decryptionProof as Hex);
           }
+
+          const batchId = Number(group[0].data.batchId);
+          const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+          const executeHash = await walletClient.writeContract({
+            address: executor,
+            abi: EXECUTOR_ABI,
+            functionName: "executeBatchSamePair",
+            args: [batchId, intentIds, minOutProofs, deadline],
+          });
+          const executeReceipt = await publicClient.waitForTransactionReceipt({ hash: executeHash });
+          if (executeReceipt.status !== "success") throw new Error(`Batch ${batchId} execution reverted: ${executeHash}`);
+          console.log(`Batch ${batchId} executed in one AMM transaction: ${executeHash}`);
+        } catch (error) {
+          console.error(`Batch group failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-
-    } catch (e) {
-      console.error("Polling error:", e instanceof Error ? e.message : e);
+    } catch (error) {
+      console.error(`Polling error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    await sleep(5000);
+    if (process.env.SOLVER_ONCE === "1") break;
+    await sleep(pollMs);
   }
 }
 

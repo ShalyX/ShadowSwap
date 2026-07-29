@@ -191,8 +191,10 @@ export function SwapDesk() {
     if (!walletClient || !publicClient || !address) return;
     setBusy(true);
     try {
-      setStatus(`Approving the settlement executor for 1 hour...`);
-      const until = BigInt(Math.floor(Date.now() / 1000) + 3600);
+      setStatus(`Approving the settlement executor through the intent lifetime...`);
+      // Intents remain valid for 24 hours. Keep the operator grant alive one
+      // additional hour so a batch sealed near expiry can still settle.
+      const until = BigInt(Math.floor(Date.now() / 1000) + 90000);
       const hash = await writeContractAsync({
         address: cTokenIn,
         abi: erc7984Abi,
