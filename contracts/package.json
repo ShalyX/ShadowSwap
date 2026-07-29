@@ -6,11 +6,17 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "typecheck:golden": "tsc -p tsconfig.golden.json",
+    "verify:deployment": "node --import tsx scripts/verify-runtime.ts",
     "deploy:local": "hardhat run scripts/deploy.ts --network hardhat",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "settle:solo": "hardhat run scripts/settle-solo.ts --network sepolia",
+    "settle:golden": "node --import tsx scripts/golden-batch.ts",
     "solver": "hardhat run scripts/solver-bot.ts --network sepolia",
     "clean": "hardhat clean"
+  },
+  "overrides": {
+    "ws": "8.21.0"
   },
   "dependencies": {
     "@iexec-nox/handle": "0.1.0-beta.13",
@@ -24,7 +30,8 @@
     "@types/node": "^22.15.0",
     "dotenv": "^16.5.0",
     "hardhat": "^3.11.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.8.3",
-    "viem": "^2.31.0"
+    "viem": "2.50.4"
   }
 }

@@ -2,8 +2,24 @@
 
 **A privacy-aware intent settlement prototype built on iExec Nox.**
 
-**Demo UI:** [https://shadowswap-app.vercel.app](https://shadowswap-app.vercel.app)
-The legacy Sepolia deployment is transaction-paused in the UI until the hardened v2 contracts are redeployed.
+**Live Sepolia app:** [https://shadowswap-app.vercel.app](https://shadowswap-app.vercel.app)
+
+## Verified security-v4 settlement
+
+The current Sepolia deployment completed a two-intent batch through one `SimpleAMM` interaction:
+
+- Batch: `1`
+- Intents: `1` and `2`
+- Inputs: `5 sUSD` and `7 sUSD`
+- Aggregate execution: `12 sUSD` → `0.005981284399134487 sETH`
+- Outputs: re-shielded pro rata into confidential `cSETH` balances
+- Receipt: [Blockscout](https://eth-sepolia.blockscout.com/tx/0x7f3489df7a6ed2e9e035b271f574a7953c5db6a3d7867087ed5372c5c1bb74f1)
+- Intent book: [`0x0a4c20c67775b126dd4b6c34479613771c517c44`](https://eth-sepolia.blockscout.com/address/0x0a4c20c67775b126dd4b6c34479613771c517c44)
+- Executor: [`0xc5633e64da98ca9039eeb9f5661eca5653ede0d6`](https://eth-sepolia.blockscout.com/address/0xc5633e64da98ca9039eeb9f5661eca5653ede0d6)
+- Executor runtime hash: `0x71280e3cda1dd701cab7d4311df0683c5f3b0592ebc6f7eb6725b5b4763b7c49`
+- Machine-readable evidence: [`evidence/golden-batch/v4/latest.json`](evidence/golden-batch/v4/latest.json)
+
+Security version 4 prevents duplicate unwrap requests, reconciles permissionless wrapper finalization, reserves finalized underlying per token, and prevents owner rescue from consuming that reserve. The deployed contracts remain testnet prototypes and are not externally audited.
 
 ---
 
@@ -47,8 +63,8 @@ ShadowSwap consists of three core components:
 - A sleek, terminal-inspired dark-mode UI built with Next.js, Wagmi, and Viem.
 - Integrates the `@iexec-nox/handle` SDK to encrypt inputs directly in the browser and automatically orchestrate the multi-step signature flows required for FHE operations.
 
-### 3. Solver Bot (Node.js)
-- A decentralized background worker that actively monitors the `ShadowIntentBook`.
+### 3. Authorized Solver Bot (Node.js)
+- An owner-authorized background worker that monitors the `ShadowIntentBook`.
 - It dynamically batches pending intents, polls the Nox Gateway for `publicDecrypt` proofs, and submits the final settlement transaction to the blockchain.
 
 ---

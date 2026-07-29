@@ -15,7 +15,7 @@ export function PrivacyPanel() {
 
   const contracts = deployments.contracts as Record<string, string>;
   const ready =
-    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 2 &&
+    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 4 &&
     isAddress(contracts.intentBook) &&
     contracts.intentBook !== zeroAddress;
 

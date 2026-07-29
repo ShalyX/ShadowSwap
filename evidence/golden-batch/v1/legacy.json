@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "network": "sepolia",
+  "startedAt": "2026-07-28T09:57:35.250Z",
+  "signer": "0x709F18F797347FbB8D53Fb60567892751dd14B11",
+  "batchId": 15,
+  "amounts": [
+    "5000000",
+    "7000000"
+  ],
+  "intents": [
+    {
+      "id": "16",
+      "submitTx": "0x233fcb89cc00969cb2de9d940c7c91a1d960a444896e7018b9148e8c52736d35"
+    },
+    {
+      "id": "17",
+      "submitTx": "0x7295ad867bc30361638f3a4c829bcef098256cdb55830c037276471c0877eac4"
+    }
+  ],
+  "approvalTx": "0x1856b8b82be6e6f5d1c981faaf9240774c2e8d511ece8f1d9847cf651a2c6a09",
+  "wrapTx": "0x7c1c0f3a6dbf5227f54e831eb2b2ef65b6d2db242fbaa89cfd588bb1f5594430",
+  "fastBatch": {
+    "batchId": 17,
+    "intents": [
+      {
+        "id": "18",
+        "amount": "5000000",
+        "submitTx": "0x94888d76d46a90957cd836dd3266e6625c077e4d915b15c9255c4e32c7c417cc"
+      },
+      {
+        "id": "19",
+        "amount": "7000000",
+        "submitTx": "0x0bac6b7a256cc94010a69158fceee58e2a5eebad7b5d64943ddb060cbdd8780f"
+      }
+    ],
+    "approvalTx": "0xc31c52c5754b4079accceb4ac7160e573c47790afb8000ea90e06ea893e4d19c",
+    "wrapTx": "0x3d2e8cc80011474b59c4e684ce83514ca5af16e45dab584726275f5040f96bf8",
+    "operatorTx": "0x93a6e94dac63e81257740e66b7f0991044a0706747a06fda69dcf2a1653ba862",
+    "broadcastAt": "2026-07-28T10:03:37.342Z",
+    "executeTx": "0x6d45deb0db9bb4b68e2762255bfacd6bd2474c5c83f8dd671b2e9cf4126d7b09",
+    "netAmountIn": "12000000",
+    "netAmountOut": "5718995683194033",
+    "intentCount": 2,
+    "blockNumber": "11367901",
+    "gasUsed": "390420",
+    "completedAt": "2026-07-28T10:05:48.000Z"
+  },
+  "completedAt": "2026-07-28T10:05:48.000Z"
+}

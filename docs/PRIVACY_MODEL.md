@@ -68,9 +68,9 @@ The grant is explicit, address-specific, and controlled by the intent owner. It 
 | AMM sandwich at execution | Submitted min-out is public-decrypted with a Nox proof and enforced with the deadline | Standard AMM MEV remains once values are clear |
 | Malicious settlement caller | Authorized-solver gate; recipients/tokens/amounts derived from stored intents | Owner controls solver allowlist; solver can delay settlement |
 | Wrapper/token substitution | Immutable owner-registered wrapper/underlying pairs checked at submission and settlement | Owner can register additional trusted pairs |
-| Interrupted multi-transaction settlement | `Settling` state blocks cancellation; user refund paths cover pre-unwrap and finalized inputs | An unwrap already started must first be publicly finalized before refund |
+| Interrupted multi-transaction settlement | `Settling` state blocks cancellation; user refund paths cover pre-unwrap and finalized inputs; v4 reconciles direct wrapper finalization and reserves finalized underlying | An unwrap already started must first be publicly finalized before refund |
 | Expired sealed intent | User may cancel an expired `Batched` intent until settlement starts | Timely settlement still depends on an active confidential-token operator grant |
-| Compromised contract owner | Owner-only solver, adapter, intent-book, and rescue controls | v2 is admin-trusted; no timelock or multisig is enforced by the contracts |
+| Compromised contract owner | Owner-only solver, adapter, intent-book, and rescue controls | v4 is admin-trusted; no timelock or multisig is enforced by the contracts |
 
 ## Comparison to naive private swap
 
@@ -99,7 +99,7 @@ The grant is explicit, address-specific, and controlled by the intent owner. It 
 
 ## Current deployment status
 
-The checked-in Sepolia addresses predate the hardened executor interface. Transactional swap and batch controls remain disabled unless the deployment manifest declares `executorSecurityVersion: 2`. A new deployment must authorize the intended solver and uses the repository's `SimpleAMM` demo venue unless explicitly configured otherwise.
+The checked-in Sepolia deployment declares `executorSecurityVersion: 4`. Transactional controls are enabled for that exact version. The deployment authorizes the configured solver and uses the repository's `SimpleAMM` demo venue. The verified two-intent receipt and machine-readable evidence are linked from the README.
 
 ---
 

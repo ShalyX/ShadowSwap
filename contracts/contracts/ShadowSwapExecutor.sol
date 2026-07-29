@@ -46,9 +46,11 @@ contract ShadowSwapExecutor {
     /// @notice Last amount handle pulled for an intent (event-parse fallback).
     mapping(uint256 => euint256) public lastPulledAmount;
     mapping(uint256 => euint256) public unwrapRequestForIntent;
-    mapping(uint256 => uint256) private _finalizedAmountIn;
-    mapping(uint256 => bool) private _finalizedAmountReady;
+    mapping(uint256 => uint256) internal _finalizedAmountIn;
+    mapping(uint256 => bool) internal _finalizedAmountReady;
     mapping(uint256 => bool) public settlementStarted;
+    /// @notice Proof-finalized underlying reserved for intents that have not executed or refunded.
+    mapping(address => uint256) public reservedUnderlying;
 
     // ============ Events ============
 
@@ -98,6 +100,10 @@ contract ShadowSwapExecutor {
     error IntentMismatch();
     error DuplicateIntent();
     error UnwrapNotFinalized();
+    error UnwrapAlreadyStarted();
+    error FinalizationAlreadyRecorded();
+    error UnderlyingBalanceMismatch();
+    error ReservedFunds();
     error IntentAlreadyPulled();
     error BadMinOut();
     error TransferFailed();
@@ -140,6 +146,10 @@ contract ShadowSwapExecutor {
         emit IntentBookUpdated(book_);
     }
 
+    function finalizedAmountIn(uint256 intentId) external view returns (uint256) {
+        return _finalizedAmountReady[intentId] ? _finalizedAmountIn[intentId] : 0;
+    }
+
     /**
      * @notice Execute a single intent end-to-end (demo / solo path).
      * @dev Off-chain prep required:
@@ -166,8 +176,8 @@ contract ShadowSwapExecutor {
         if (!_finalizedAmountReady[intentId] || amountInClear == 0) revert UnwrapNotFinalized();
         uint256 minOutClear = Nox.publicDecrypt(intent.minAmountOut, minOutDecryptProof);
         if (minOutClear == 0) revert BadMinOut();
-        delete _finalizedAmountIn[intentId];
-        delete _finalizedAmountReady[intentId];
+        reservedUnderlying[intent.tokenIn] -= amountInClear;
+        _clearSettlement(intentId);
 
         address user = intent.user;
         address cTokenOut = intent.cTokenOut;
@@ -249,8 +259,8 @@ contract ShadowSwapExecutor {
             users[i] = intent.user;
             amountIns[i] = amountIn;
             minOuts[i] = minOut;
-            delete _finalizedAmountIn[intentIds[i]];
-            delete _finalizedAmountReady[intentIds[i]];
+            reservedUnderlying[tokenIn] -= amountIn;
+            _clearSettlement(intentIds[i]);
             netIn += amountIn;
             maxMinOut += minOut;
         }
@@ -344,6 +354,9 @@ contract ShadowSwapExecutor {
             cTokenIn != intent.cTokenIn ||
             euint256.unwrap(amount) != euint256.unwrap(lastPulledAmount[intentId])
         ) revert IntentMismatch();
+        if (euint256.unwrap(unwrapRequestForIntent[intentId]) != bytes32(0)) {
+            revert UnwrapAlreadyStarted();
+        }
         unwrapRequestId = IERC20ToERC7984Wrapper(cTokenIn).unwrap(
             address(this),
             address(this),
@@ -372,8 +385,22 @@ contract ShadowSwapExecutor {
             cTokenIn != intent.cTokenIn ||
             euint256.unwrap(unwrapRequestId) != euint256.unwrap(unwrapRequestForIntent[intentId])
         ) revert IntentMismatch();
-        uint256 amountInClear = Nox.publicDecrypt(unwrapRequestId, decryptedAmountAndProof);
-        IERC20ToERC7984Wrapper(cTokenIn).finalizeUnwrap(unwrapRequestId, decryptedAmountAndProof);
+        if (_finalizedAmountReady[intentId]) revert FinalizationAlreadyRecorded();
+
+        uint256 amountInClear = _decryptUnwrapAmount(unwrapRequestId, decryptedAmountAndProof);
+        IERC20ToERC7984Wrapper wrapper = IERC20ToERC7984Wrapper(cTokenIn);
+        address requester = wrapper.unwrapRequester(unwrapRequestId);
+        if (requester == address(this)) {
+            wrapper.finalizeUnwrap(unwrapRequestId, decryptedAmountAndProof);
+        } else if (requester != address(0)) {
+            revert IntentMismatch();
+        }
+
+        uint256 newReserved = reservedUnderlying[intent.tokenIn] + amountInClear;
+        if (IERC20(intent.tokenIn).balanceOf(address(this)) < newReserved) {
+            revert UnderlyingBalanceMismatch();
+        }
+        reservedUnderlying[intent.tokenIn] = newReserved;
         _finalizedAmountIn[intentId] = amountInClear;
         _finalizedAmountReady[intentId] = true;
         emit UnwrapFinalized(intentId, cTokenIn, unwrapRequestId);
@@ -391,6 +418,7 @@ contract ShadowSwapExecutor {
         ) revert RefundNotReady();
 
         lastPulledAmount[intentId] = euint256.wrap(bytes32(0));
+        unwrapRequestForIntent[intentId] = euint256.wrap(bytes32(0));
         delete settlementStarted[intentId];
         IERC7984(intent.cTokenIn).confidentialTransfer(intent.user, amount);
         intentBook.markRefunded(intentId);
@@ -406,9 +434,8 @@ contract ShadowSwapExecutor {
         ) revert RefundNotReady();
         uint256 amount = _finalizedAmountIn[intentId];
 
-        delete _finalizedAmountIn[intentId];
-        delete _finalizedAmountReady[intentId];
-        delete settlementStarted[intentId];
+        reservedUnderlying[intent.tokenIn] -= amount;
+        _clearSettlement(intentId);
         IERC20(intent.tokenIn).forceApprove(intent.cTokenIn, amount);
         IERC20ToERC7984Wrapper(intent.cTokenIn).wrap(intent.user, amount);
         intentBook.markRefunded(intentId);
@@ -419,6 +446,9 @@ contract ShadowSwapExecutor {
      * @notice Rescue tokens (demo ops).
      */
     function rescueToken(address token, address to, uint256 amount) external onlyOwner {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 reserved = reservedUnderlying[token];
+        if (balance < reserved || amount > balance - reserved) revert ReservedFunds();
         IERC20(token).safeTransfer(to, amount);
     }
 
@@ -431,6 +461,21 @@ contract ShadowSwapExecutor {
     ) external view returns (uint256 minOutClear) {
         euint256 handle = intentBook.minOutHandle(intentId);
         minOutClear = Nox.publicDecrypt(handle, decryptionProof);
+    }
+
+    function _decryptUnwrapAmount(
+        euint256 unwrapRequestId,
+        bytes calldata decryptedAmountAndProof
+    ) internal view virtual returns (uint256) {
+        return Nox.publicDecrypt(unwrapRequestId, decryptedAmountAndProof);
+    }
+
+    function _clearSettlement(uint256 intentId) internal {
+        delete _finalizedAmountIn[intentId];
+        delete _finalizedAmountReady[intentId];
+        delete settlementStarted[intentId];
+        lastPulledAmount[intentId] = euint256.wrap(bytes32(0));
+        unwrapRequestForIntent[intentId] = euint256.wrap(bytes32(0));
     }
 
     function _validateIntentAssets(ShadowIntentBook.Intent memory intent) private view {

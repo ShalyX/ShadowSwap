@@ -13,7 +13,7 @@ export default function HomePage() {
   const contracts = deployments.contracts as Record<string, string>;
   const explorer = (deployments as { explorer?: string }).explorer ?? "https://sepolia.etherscan.io";
   const deployed =
-    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 2 &&
+    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 4 &&
     contracts.intentBook &&
     contracts.intentBook !== "0x0000000000000000000000000000000000000000";
 
@@ -48,7 +48,7 @@ export default function HomePage() {
           </span>
         </div>
         <span className="mono" style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
-          NETTING WINDOW: <strong style={{ color: "var(--aurora-start)" }}>30s BATCH</strong>
+          NETTING WINDOW: <strong style={{ color: "var(--aurora-start)" }}>{(deployments.config as { batchWindowSeconds?: number }).batchWindowSeconds ?? "?"}s BATCH</strong>
         </span>
       </div>
 

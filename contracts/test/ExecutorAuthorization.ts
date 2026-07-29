@@ -8,6 +8,8 @@ const EXECUTOR_ABI = [
   { type: "error", name: "AssetPairMismatch", inputs: [] },
   { type: "error", name: "UnauthorizedSolver", inputs: [] },
   { type: "error", name: "IntentNotReady", inputs: [] },
+  { type: "error", name: "UnwrapAlreadyStarted", inputs: [] },
+  { type: "error", name: "ReservedFunds", inputs: [] },
   {
     type: "function",
     name: "executeBatchSamePair",
@@ -262,5 +264,81 @@ describe("ShadowSwapExecutor authorization", async function () {
     const batch = await book.read.batches([1]) as readonly [bigint, bigint, boolean, boolean];
     assert.equal(intent.status, 4);
     assert.equal(batch[3], true);
+  });
+
+  it("rejects a second unwrap request before calling the wrapper again", async function () {
+    const token = await viem.deployContract("MockERC20", ["Mock", "MOCK", 6]);
+    const wrapper = await viem.deployContract("MockUnwrapWrapper", [token.address]);
+    const book = await viem.deployContract("MockIntentBook", []);
+    await book.write.setIntent([
+      1n,
+      owner.account.address,
+      wrapper.address,
+      wrapper.address,
+      token.address,
+      token.address,
+      7,
+      5,
+    ]);
+    await book.write.setAssetPair([wrapper.address, token.address]);
+    const executor = await viem.deployContract("ShadowSwapExecutorHarness", [book.address, zeroAddress]);
+    const amountHandle = `0x${"11".repeat(32)}` as `0x${string}`;
+    const requestHandle = `0x${"22".repeat(32)}` as `0x${string}`;
+    await executor.write.seedSettlement([1n, amountHandle, requestHandle]);
+
+    await assert.rejects(
+      executor.write.startUnwrapHeld([1n, wrapper.address, amountHandle]),
+      (error: unknown) => String(error).includes("UnwrapAlreadyStarted")
+    );
+  });
+
+  it("reconciles an unwrap finalized directly on the wrapper", async function () {
+    const token = await viem.deployContract("MockERC20", ["Mock", "MOCK", 6]);
+    const wrapper = await viem.deployContract("MockUnwrapWrapper", [token.address]);
+    const book = await viem.deployContract("MockIntentBook", []);
+    await book.write.setIntent([
+      1n,
+      owner.account.address,
+      wrapper.address,
+      wrapper.address,
+      token.address,
+      token.address,
+      7,
+      5,
+    ]);
+    await book.write.setAssetPair([wrapper.address, token.address]);
+    const executor = await viem.deployContract("ShadowSwapExecutorHarness", [book.address, zeroAddress]);
+    const amountHandle = `0x${"11".repeat(32)}` as `0x${string}`;
+    const requestHandle = `0x${"22".repeat(32)}` as `0x${string}`;
+    await executor.write.seedSettlement([1n, amountHandle, requestHandle]);
+    await executor.write.setMockDecryptedAmount([5_000_000n]);
+    await token.write.mint([executor.address, 5_000_000n]);
+
+    await executor.write.finalizeUnwrapForIntent([
+      1n,
+      wrapper.address,
+      requestHandle,
+      "0x",
+    ]);
+
+    assert.equal(await executor.read.finalizedAmountIn([1n]), 5_000_000n);
+    assert.equal(await executor.read.reservedUnderlying([token.address]), 5_000_000n);
+  });
+
+  it("only rescues underlying above the amount reserved for users", async function () {
+    const token = await viem.deployContract("MockERC20", ["Mock", "MOCK", 6]);
+    const book = await viem.deployContract("MockIntentBook", []);
+    const executor = await viem.deployContract("ShadowSwapExecutorHarness", [book.address, zeroAddress]);
+    await token.write.mint([executor.address, 7_000_000n]);
+    await executor.write.seedReservedUnderlying([token.address, 5_000_000n]);
+
+    await assert.rejects(
+      executor.write.rescueToken([token.address, owner.account.address, 2_000_001n]),
+      (error: unknown) => String(error).includes("ReservedFunds")
+    );
+
+    await executor.write.rescueToken([token.address, owner.account.address, 2_000_000n]);
+    assert.equal(await token.read.balanceOf([executor.address]), 5_000_000n);
+    assert.equal(await executor.read.reservedUnderlying([token.address]), 5_000_000n);
   });
 });

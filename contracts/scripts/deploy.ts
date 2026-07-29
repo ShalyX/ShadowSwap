@@ -12,10 +12,10 @@
  * Env:
  *  PRIVATE_KEY, SEPOLIA_RPC_URL (for sepolia), optional SOLVER_ADDRESS
  */
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import hre from "hardhat";
-import { isAddress } from "viem";
+import { isAddress, keccak256, type Hex } from "viem";
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -159,6 +159,27 @@ async function main() {
   await waitTx("fund faucet sETH", tokenB.write.transfer([faucet.address, faucetB * 50n], txOpts));
 
   const chainId = await publicClient.getChainId();
+  const executorArtifact = JSON.parse(
+    readFileSync(
+      join(
+        process.cwd(),
+        "artifacts",
+        "contracts",
+        "ShadowSwapExecutor.sol",
+        "ShadowSwapExecutor.json"
+      ),
+      "utf8"
+    )
+  ) as { deployedBytecode: Hex };
+  const deployedExecutorCode = await publicClient.getCode({ address: executor.address });
+  if (!deployedExecutorCode) throw new Error("deployed executor has no runtime bytecode");
+  const localExecutorHash = keccak256(executorArtifact.deployedBytecode);
+  const executorRuntimeCodeHash = keccak256(deployedExecutorCode);
+  if (localExecutorHash !== executorRuntimeCodeHash) {
+    throw new Error(
+      `deployed executor runtime mismatch: local=${localExecutorHash} deployed=${executorRuntimeCodeHash}`
+    );
+  }
   const deployment = {
     network: chainId === 11155111 ? "sepolia" : `chain-${chainId}`,
     chainId,
@@ -181,7 +202,8 @@ async function main() {
       uniswapV2Router02Sepolia: "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3",
     },
     config: {
-      executorSecurityVersion: 2,
+      executorSecurityVersion: 4,
+      executorRuntimeCodeHash,
       settlementVenue: "SimpleAMM demo",
       solver: configuredSolver ?? deployer,
       batchWindowSeconds: Number(batchWindow),
