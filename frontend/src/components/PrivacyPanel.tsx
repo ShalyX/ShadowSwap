@@ -59,10 +59,10 @@ export function PrivacyPanel() {
   };
 
   return (
-    <aside className="card privacy-card" style={{ padding: "1.5rem" }}>
+    <aside className="card" style={{ padding: "1.5rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
         <ShieldIcon size={18} color="var(--aurora-start)" />
-        <h3 style={{ margin: 0, fontSize: "1.1rem", letterSpacing: "-0.02em", color: "var(--text)" }}>Auditor access</h3>
+        <h3 style={{ margin: 0, fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--aurora-start)" }}>Privacy Model & Compliance</h3>
       </div>
       
       <div style={{ display: "grid", gap: "1.25rem" }}>
@@ -85,7 +85,7 @@ export function PrivacyPanel() {
         <div style={{ display: "flex", gap: "1rem" }}>
           <div style={{ color: "var(--aurora-start)" }}><CheckCircleIcon size={16} /></div>
           <div>
-            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>Public settlement</strong>
+            <strong style={{ color: "var(--text)", display: "block", marginBottom: "0.25rem" }}>Honest Settlement</strong>
             <span style={{ color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>Sizes are only revealed when unwrapping into the public AMM. Outputs re-shield instantly.</span>
           </div>
         </div>
@@ -148,7 +148,7 @@ export function PrivacyPanel() {
             rel="noreferrer"
             style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.2rem" }}
           >
-            <code className="mono" style={{ color: "var(--accent)", background: "rgba(113, 112, 255, 0.1)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer" }}>
+            <code className="mono" style={{ color: "var(--aurora-start)", background: "rgba(0, 229, 255, 0.1)", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer" }}>
               docs/PRIVACY_MODEL.md <ExternalLinkIcon size={12} />
             </code>
           </a>

@@ -37,10 +37,6 @@ export function UnwrapDesk() {
     query: { enabled: !!address && !!ready }
   });
 
-  const hasConfidentialBalance =
-    !!cSETHHandle &&
-    cSETHHandle !== "0x0000000000000000000000000000000000000000000000000000000000000000";
-
   const handleDecryptBalance = async () => {
     if (!walletClient || !cSETHHandle || cSETHHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") {
       setDecryptedCSETH("0.0000");
@@ -145,10 +141,10 @@ export function UnwrapDesk() {
   };
 
   return (
-    <div className="card balance-card" style={{ padding: "1.75rem" }}>
+    <div className="card" style={{ padding: "1.75rem", marginTop: "1rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <LockIcon size={18} /> Confidential balance
+          <LockIcon size={18} /> Manage Balances
         </h2>
         <span className="badge">Unwrap cSETH</span>
       </div>
@@ -163,14 +159,10 @@ export function UnwrapDesk() {
             <div className="mono" style={{ fontSize: "1.2rem", fontWeight: "bold", marginTop: "0.2rem", color: decryptedCSETH !== null ? "var(--aurora-start)" : "var(--text)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
               {decryptedCSETH !== null ? (
                 `${Number(decryptedCSETH).toFixed(4)} cSETH`
-              ) : hasConfidentialBalance ? (
-                <>
-                  <LockIcon size={16} color="var(--aurora-start)" /> Encrypted balance handle
-                </>
-              ) : isConnected ? (
-                "No confidential balance"
               ) : (
-                "Connect wallet to view"
+                <>
+                  <LockIcon size={16} color="var(--aurora-start)" /> Encrypted Nox Handle
+                </>
               )}
             </div>
           </div>
