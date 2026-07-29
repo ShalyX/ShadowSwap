@@ -1,5 +1,37 @@
 export type OpenBatchDecision = "wait" | "seal";
 
+export function isPermanentSettlementFailure(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("revert") ||
+    normalized.includes("not an authorized solver") ||
+    normalized.includes("not safely resumable") ||
+    normalized.includes("invalid minout") ||
+    normalized.includes("non-positive input")
+  );
+}
+
+export function solverExitCode(message: string): 1 | 78 {
+  return isPermanentSettlementFailure(message) ? 78 : 1;
+}
+
+export function shouldProcessBatch(batchId: number, minimumBatchId: number, maximumBatchId?: number): boolean {
+  return batchId >= minimumBatchId && (maximumBatchId === undefined || batchId <= maximumBatchId);
+}
+
+export function isActiveIntentCandidate(input: {
+  batchId: number;
+  status: number;
+  deadline: bigint;
+  now: bigint;
+  minimumBatchId: number;
+  maximumBatchId?: number;
+}): boolean {
+  if (!shouldProcessBatch(input.batchId, input.minimumBatchId, input.maximumBatchId)) return false;
+  if (input.status === 5) return true;
+  return (input.status === 1 || input.status === 2) && input.deadline >= input.now;
+}
+
 export function decideOpenBatch(input: {
   compatibleCount: number;
   openAt: bigint;

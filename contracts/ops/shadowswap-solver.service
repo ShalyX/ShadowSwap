@@ -14,9 +14,12 @@ EnvironmentFile=/etc/shadowswap/solver.env
 Environment=NODE_ENV=production
 Environment=SOLVER_POLL_MS=30000
 Environment=SOLVER_MAX_SCAN=200
+Environment=SOLVER_MIN_BATCH_ID=7
+Environment=SOLVER_MAX_BATCH_ID=7
 Environment=SOLVER_MIN_GAS_WEI=1000000000000000
 ExecStart=/opt/shadowswap-solver/bin/node --import tsx scripts/solver-bot.ts
-Restart=always
+Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=15
 TimeoutStopSec=30
 KillSignal=SIGTERM

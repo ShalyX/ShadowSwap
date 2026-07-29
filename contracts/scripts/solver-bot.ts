@@ -11,7 +11,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
-import { decideOpenBatch, nextIntentSettlementStep } from "./lib/solver-policy.js";
+import { decideOpenBatch, isActiveIntentCandidate, isPermanentSettlementFailure, nextIntentSettlementStep, solverExitCode } from "./lib/solver-policy.js";
 
 const EXECUTOR_ABI = [
   {
@@ -163,13 +163,6 @@ const BOOK_ABI = [
       { name: "isExecuted", type: "bool" },
     ],
   },
-  {
-    type: "function",
-    name: "sealCurrentBatch",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: [{ name: "sealedId", type: "uint32" }],
-  },
 ] as const;
 
 function loadDeployment() {
@@ -266,12 +259,23 @@ async function main() {
   const minimumGasWei = BigInt(process.env.SOLVER_MIN_GAS_WEI || "1000000000000000");
   const pollMs = Number(process.env.SOLVER_POLL_MS || "15000");
   const maxScan = BigInt(process.env.SOLVER_MAX_SCAN || "200");
+  const minimumBatchId = Number(process.env.SOLVER_MIN_BATCH_ID);
+  const maximumBatchIdRaw = process.env.SOLVER_MAX_BATCH_ID;
+  const maximumBatchId = maximumBatchIdRaw === undefined ? undefined : Number(maximumBatchIdRaw);
+  const discoveryOnly = process.env.SOLVER_DISCOVERY_ONLY === "1";
   if (!Number.isSafeInteger(pollMs) || pollMs < 5000) throw new Error("SOLVER_POLL_MS must be an integer >= 5000");
+  if (!Number.isSafeInteger(minimumBatchId) || minimumBatchId < 1) {
+    throw new Error("SOLVER_MIN_BATCH_ID must be an integer >= 1; refusing an unconstrained historical scan");
+  }
+  if (maximumBatchId !== undefined && (!Number.isSafeInteger(maximumBatchId) || maximumBatchId < minimumBatchId)) {
+    throw new Error("SOLVER_MAX_BATCH_ID must be an integer >= SOLVER_MIN_BATCH_ID");
+  }
 
   console.log("🤖 ShadowSwap Solver Bot Initialized");
   console.log("Signer:", account.address);
   console.log("Executor:", executor);
   console.log("IntentBook:", intentBook);
+  console.log("Activation range:", maximumBatchId === undefined ? `${minimumBatchId}+` : `${minimumBatchId}-${maximumBatchId}`);
 
   const { createViemHandleClient } = await import("@iexec-nox/handle");
   const handleClient = await createViemHandleClient(walletClient as never, {
@@ -333,9 +337,26 @@ async function main() {
           args: [intentId],
         });
         const status = Number(intent.status);
-        const freshQueued = (status === 1 || status === 2) && intent.deadline >= now;
-        const recoverable = status === 5;
-        if (freshQueued || recoverable) activeIntents.push({ id: intentId, data: intent });
+        const active = isActiveIntentCandidate({
+          batchId: Number(intent.batchId),
+          status,
+          deadline: intent.deadline,
+          now,
+          minimumBatchId,
+          maximumBatchId,
+        });
+        if (active) activeIntents.push({ id: intentId, data: intent });
+      }
+
+      if (discoveryOnly) {
+        const manifest = activeIntents.map((row) => ({
+          id: row.id.toString(),
+          batchId: Number(row.data.batchId),
+          status: Number(row.data.status),
+          deadline: Number(row.data.deadline),
+        }));
+        console.log("Discovery manifest:", JSON.stringify(manifest));
+        return;
       }
 
       const pairKey = (row: { data: any }) => [
@@ -362,19 +383,11 @@ async function main() {
         windowSeconds: batchWindow,
         now,
       });
-      let sealedNow = false;
       if (sealDecision === "seal") {
-        console.log(`Sealing batch ${currentBatchId}: ${largestCompatibleGroup} compatible intent(s)`);
-        const sealHash = await walletClient.writeContract({
-          address: intentBook,
-          abi: BOOK_ABI,
-          functionName: "sealCurrentBatch",
-          args: [],
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash: sealHash });
-        if (receipt.status !== "success") throw new Error(`Batch seal reverted: ${sealHash}`);
-        sealedNow = true;
-        console.log(`Batch ${currentBatchId} sealed: ${sealHash}`);
+        console.log(
+          `Batch ${currentBatchId} is ready to seal with ${largestCompatibleGroup} compatible intent(s); ` +
+          "waiting for an externally submitted seal because the deployed argumentless seal function cannot be race-bound to an expected batch id"
+        );
       } else if (currentPending.length > 0 && !isSealed) {
         const age = now > openAt ? now - openAt : 0n;
         console.log(`Batch ${currentBatchId} remains open: ${largestCompatibleGroup} compatible, age ${age}/${batchWindow}s`);
@@ -382,8 +395,7 @@ async function main() {
 
       const processable = activeIntents.filter((row) => {
         const status = Number(row.data.status);
-        if (status === 2 || status === 5) return true;
-        return status === 1 && sealedNow && Number(row.data.batchId) === Number(currentBatchId);
+        return status === 2 || status === 5;
       });
       const groups: Record<string, typeof processable> = {};
       for (const row of processable) (groups[pairKey(row)] ||= []).push(row);
@@ -505,11 +517,19 @@ async function main() {
           if (executeReceipt.status !== "success") throw new Error(`Batch ${batchId} execution reverted: ${executeHash}`);
           console.log(`Batch ${batchId} executed in one AMM transaction: ${executeHash}`);
         } catch (error) {
-          console.error(`Batch group failed: ${error instanceof Error ? error.message : String(error)}`);
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Batch group failed: ${message}`);
+          if (isPermanentSettlementFailure(message)) throw error;
         }
       }
     } catch (error) {
-      console.error(`Polling error: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Polling error: ${message}`);
+      if (isPermanentSettlementFailure(message)) {
+        console.error("Solver halted on a deterministic settlement failure; operator recovery is required");
+        process.exitCode = 78;
+        return;
+      }
     }
 
     if (process.env.SOLVER_ONCE === "1") break;
@@ -518,6 +538,7 @@ async function main() {
 }
 
 main().catch((err) => {
+  const message = err instanceof Error ? err.message : String(err);
   console.error(err);
-  process.exitCode = 1;
+  process.exitCode = solverExitCode(message);
 });
