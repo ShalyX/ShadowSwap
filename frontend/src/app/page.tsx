@@ -2,138 +2,100 @@
 
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { Header } from "@/components/Header";
 import { NetworkGuard } from "@/components/NetworkGuard";
-import { PrivacyPanel } from "@/components/PrivacyPanel";
-import { ShieldIcon, LockIcon, SparklesIcon, ExternalLinkIcon } from "@/components/Icons";
 import deployments from "@/lib/deployments.json";
-import Link from "next/link";
+
+function shortAddress(value: string) {
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function IntentVeil() {
+  return (
+    <div className="veil-instrument" aria-label="Encrypted intent settlement model">
+      <div className="veil-header">
+        <span className="veil-title">Open batch</span>
+        <span className="veil-status"><span className="pulse-dot" /> accepting intents</span>
+      </div>
+      <div className="veil-body">
+        {["41%", "73%", "56%"].map((width, index) => (
+          <div className="intent-row" key={width}>
+            <span className="intent-index">0{index + 1}</span>
+            <span className="intent-line" style={{ "--intent-width": width } as React.CSSProperties} />
+            <span className="intent-sealed">size sealed</span>
+          </div>
+        ))}
+      </div>
+      <div className="settlement-boundary">
+        <span className="eyebrow">Settlement boundary</span>
+        <strong>One public AMM interaction</strong>
+        <div className="settlement-meta"><span>same-pair batch</span><span>outputs re-shielded</span></div>
+      </div>
+      <p className="boundary-note">Queued sizes stay encrypted. Individual values become public during settlement. Standard AMM execution risk remains.</p>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const contracts = deployments.contracts as Record<string, string>;
-  const explorer = (deployments as { explorer?: string }).explorer ?? "https://sepolia.etherscan.io";
-  const deployed =
-    (deployments.config as { executorSecurityVersion?: number }).executorSecurityVersion === 4 &&
-    contracts.intentBook &&
-    contracts.intentBook !== "0x0000000000000000000000000000000000000000";
+  const config = deployments.config as { executorSecurityVersion?: number; batchWindowSeconds?: number };
+  const explorer = (deployments as { explorer?: string }).explorer ?? "https://eth-sepolia.blockscout.com";
 
   return (
-    <main className="container" style={{ paddingBottom: "6rem", position: "relative", zIndex: 1 }}>
+    <main className="container landing">
       <Header />
       <NetworkGuard />
 
-      {/* Live Dark Forest Threat Monitor Ticker */}
-      <div style={{
-        background: "rgba(8, 11, 20, 0.8)",
-        border: "1px solid rgba(0, 229, 255, 0.2)",
-        borderRadius: "12px",
-        padding: "0.65rem 1.25rem",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontSize: "0.82rem",
-        marginBottom: "3.5rem",
-        backdropFilter: "blur(12px)",
-        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--aurora-start)", fontWeight: 700 }}>
-            <span className="pulse-dot" /> DARK FOREST THREAT MONITOR
-          </span>
-          <span style={{ color: "var(--muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <ShieldIcon size={14} color="var(--success)" /> Pre-Settlement Size Privacy: <strong style={{ color: "var(--success)" }}>ACTIVE</strong>
-          </span>
-          <span style={{ color: "var(--muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <LockIcon size={14} color="#7000FF" /> Nox TEE Enclave: <strong style={{ color: "#7000FF" }}>SEPOLIA KMS</strong>
-          </span>
-        </div>
-        <span className="mono" style={{ color: "var(--muted)", fontSize: "0.78rem" }}>
-          NETTING WINDOW: <strong style={{ color: "var(--aurora-start)" }}>{(deployments.config as { batchWindowSeconds?: number }).batchWindowSeconds ?? "?"}s BATCH</strong>
-        </span>
-      </div>
-
-      <section style={{ margin: "2rem 0 6rem", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-        <div className="badge badge-live" style={{ marginBottom: "2rem", padding: "0.55rem 1.4rem", fontSize: "0.85rem", letterSpacing: "0.05em", gap: "0.5rem" }}>
-          <SparklesIcon size={14} color="var(--aurora-start)" /> WTF Hackathon · iExec Nox Protocol
-          {deployed ? " · Hardened v4 live on Sepolia" : " · Hardened redeploy pending"}
-        </div>
-
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "clamp(3.2rem, 6.5vw, 5.5rem)",
-            letterSpacing: "-0.04em",
-            lineHeight: 1.06,
-            maxWidth: 1050,
-            fontWeight: 800
-          }}
-        >
-          Trade size stays in the shadows.
-          <span className="text-gradient" style={{ display: "block", paddingTop: "0.4rem" }}>Settlement stays composable.</span>
-        </h1>
-
-        <p style={{ color: "var(--muted)", maxWidth: 720, lineHeight: 1.7, fontSize: "1.2rem", marginTop: "2rem" }}>
-          ShadowSwap encrypts trade size and min-out while intents wait. Settlement publicly decrypts each input, then batches compatible flow into one demo-AMM trade. The hardened Sepolia deployment is live for end-to-end testing.
-        </p>
-        
-        <div style={{ marginTop: "3rem", display: "flex", gap: "1.25rem", flexWrap: "wrap", justifyContent: "center" }}>
-          <Link href="/trade" className="btn btn-primary" style={{ padding: "1.1rem 2.75rem", fontSize: "1.15rem" }}>
-            Launch Trade Console →
-          </Link>
-          <a href="https://docs.noxprotocol.io/getting-started/welcome" target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: "1.1rem 2.5rem", fontSize: "1.15rem" }}>
-            Nox Protocol Docs ↗
-          </a>
-        </div>
-
-        {/* Live Defense Metric Highlights Strip */}
-        <div style={{
-          marginTop: "4.5rem",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "1.5rem",
-          width: "100%",
-          maxWidth: 900
-        }}>
-          <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Queued Trade Size</div>
-            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--success)", marginTop: "0.2rem" }}>Encrypted</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Nox handles until unwrap</div>
+      <section className="hero">
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <div className="eyebrow">Private intent routing · Ethereum Sepolia</div>
+            <h1>Hide the size. Settle the trade.</h1>
+            <p>ShadowSwap keeps amount and minimum output encrypted while an intent waits. Compatible flow settles through one public AMM interaction, then returns confidential outputs.</p>
+            <div className="hero-actions">
+              <Link href="/trade" className="btn btn-primary">Open trade</Link>
+              <a className="btn btn-ghost" href={`${explorer}/address/${contracts.executor}`} target="_blank" rel="noreferrer">Inspect deployment</a>
+            </div>
           </div>
+          <IntentVeil />
+        </div>
 
-          <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Public Execution</div>
-            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--aurora-start)", marginTop: "0.2rem" }}>Visible</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Standard AMM MEV risk remains</div>
+        <div className="proof-strip" aria-label="Live deployment facts">
+          <div className="proof-item">
+            <div className="eyebrow">Executor</div>
+            <div className="proof-value mono">{shortAddress(contracts.executor)}</div>
+            <div className="proof-note">Security version {config.executorSecurityVersion}</div>
           </div>
-
-          <div className="card" style={{ padding: "1.25rem", textAlign: "left" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>Selective Disclosure</div>
-            <div className="mono" style={{ fontSize: "1.8rem", fontWeight: 800, color: "#7000FF", marginTop: "0.2rem" }}>Auditor ACL</div>
-            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "0.3rem" }}>Read-only view keys</div>
+          <div className="proof-item">
+            <div className="eyebrow">Intent window</div>
+            <div className="proof-value mono">{config.batchWindowSeconds}s</div>
+            <div className="proof-note">Same-pair batching on Sepolia</div>
+          </div>
+          <div className="proof-item">
+            <div className="eyebrow">Disclosure</div>
+            <div className="proof-value">User-directed auditor ACL</div>
+            <div className="proof-note">Viewer rights without spend authority</div>
           </div>
         </div>
       </section>
 
-      <div className="grid-2" style={{ alignItems: "start" }}>
-        <PrivacyPanel />
-        <div className="card" style={{ padding: "2rem" }}>
-          <h3 style={{ margin: "0 0 1.5rem", fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--aurora-start)" }}>External Resources</h3>
-          <div style={{ display: "grid", gap: "1rem", fontSize: "1rem" }}>
-            <a href="https://cdefi.iex.ec/" target="_blank" rel="noreferrer" style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", color: "var(--text)" }}>
-              <span>Confidential Token demo</span>
-              <span style={{ color: "var(--muted)" }}>↗</span>
-            </a>
-            <a href="https://dorahacks.io/hackathon/wtf-hackathon/detail" target="_blank" rel="noreferrer" style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", color: "var(--text)" }}>
-              <span>DoraHacks challenge</span>
-              <span style={{ color: "var(--muted)" }}>↗</span>
-            </a>
-            <a href="https://discord.gg/RXYHBJceMe" target="_blank" rel="noreferrer" style={{ display: "flex", justifyContent: "space-between", color: "var(--text)" }}>
-              <span>iExec Discord</span>
-              <span style={{ color: "var(--muted)" }}>↗</span>
-            </a>
-          </div>
+      <section className="mechanism">
+        <div className="mechanism-head">
+          <div className="eyebrow">Privacy boundary</div>
+          <h2>Private while queued. Public when execution requires it.</h2>
         </div>
-      </div>
+        <div className="mechanism-list">
+          <div className="mechanism-row"><span className="index">01</span><h3>Encrypt in the wallet</h3><p>Amount and minimum output are submitted as Nox handles. Plain values are not stored with the waiting intent.</p></div>
+          <div className="mechanism-row"><span className="index">02</span><h3>Net compatible flow</h3><p>Same-pair intents can share one pool interaction. The batch reduces the number of directly sized swaps visible to the pool.</p></div>
+          <div className="mechanism-row"><span className="index">03</span><h3>Reveal at settlement</h3><p>Each value is unwrapped before the public AMM call. This is pre-settlement size privacy, not private public-chain execution.</p></div>
+        </div>
+      </section>
+
+      <footer className="landing-foot">
+        <span>ShadowSwap · Nox confidential tokens · Sepolia</span>
+        <span><a href="https://github.com/ShalyX/ShadowSwap/blob/master/docs/PRIVACY_MODEL.md" target="_blank" rel="noreferrer">Privacy model</a> · <a href="https://github.com/ShalyX/ShadowSwap" target="_blank" rel="noreferrer">Source</a></span>
+      </footer>
     </main>
   );
 }

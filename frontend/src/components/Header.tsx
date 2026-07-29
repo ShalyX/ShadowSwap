@@ -1,161 +1,79 @@
 "use client";
 
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
-import {
-  isTargetChain,
-  TARGET_CHAIN_ID,
-  TARGET_CHAIN_LABEL,
-} from "@/lib/chains";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useWriteContract } from "wagmi";
+import { isTargetChain, TARGET_CHAIN_ID, TARGET_CHAIN_LABEL } from "@/lib/chains";
 import Link from "next/link";
-import Image from "next/image";
-import logoImg from "../../public/logo.jpg";
 import { usePathname } from "next/navigation";
-import { useWriteContract } from "wagmi";
 import { faucetAbi } from "@/lib/abis";
 import deployments from "@/lib/deployments.json";
+
+function ShadowMark() {
+  return (
+    <svg className="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="30" height="30" rx="8" fill="#0d0f12" stroke="rgba(255,255,255,.12)" />
+      <path d="M7 11h8l4 5-4 5H7" stroke="#7170ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M25 11h-5l-4 5 4 5h5" stroke="#d0d6e0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".9" />
+      <rect x="14" y="14" width="4" height="4" rx="1" fill="#7170ff" />
+    </svg>
+  );
+}
 
 export function Header() {
   const { address, isConnected, chainId } = useAccount();
   const { connectAsync, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
-  const pathname = usePathname();
   const { writeContract, isPending: isMinting } = useWriteContract();
+  const pathname = usePathname();
 
-  const handleGetTokens = () => {
-    writeContract({
-      address: deployments.contracts.faucet as `0x${string}`,
-      abi: faucetAbi,
-      functionName: "claim",
-    });
-  };
-
-  const short =
-    address != null ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
+  const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
   const onTarget = isConnected && isTargetChain(chainId);
   const wrongNetwork = isConnected && chainId != null && !isTargetChain(chainId);
 
   const handleConnect = async () => {
     const connector = connectors[0];
     if (!connector) return;
-    try {
-      await connectAsync({ connector });
-    } catch (e) {
-      console.warn("Wallet connect notice:", e);
-    }
+    try { await connectAsync({ connector }); }
+    catch (error) { console.warn("Wallet connect notice:", error); }
   };
 
-  const handleSwitch = () => {
-    switchChain?.({ chainId: TARGET_CHAIN_ID });
-  };
+  const handleGetTokens = () => writeContract({
+    address: deployments.contracts.faucet as `0x${string}`,
+    abi: faucetAbi,
+    functionName: "claim",
+  });
 
   return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "2rem 0",
-        gap: "1rem",
-        flexWrap: "wrap",
-        borderBottom: "1px solid var(--border)",
-        marginBottom: "3rem",
-        position: "relative",
-        zIndex: 10
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "2.5rem" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", opacity: 1 }}>
-          <Image
-            src={logoImg}
-            alt="ShadowSwap"
-            width={36}
-            height={36}
-            style={{
-              borderRadius: "8px",
-              objectFit: "cover",
-              border: "1px solid var(--border)",
-              display: "block"
-            }}
-          />
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "1.2rem", letterSpacing: "0.1em", color: "var(--text)", textTransform: "uppercase" }}>
-              ShadowSwap
-            </div>
-          </div>
+    <header className="site-header">
+      <div className="header-left">
+        <Link href="/" className="brand" aria-label="ShadowSwap home">
+          <ShadowMark />
+          <span className="brand-name">ShadowSwap</span>
         </Link>
-        
-        <nav style={{ display: "flex", gap: "2rem", borderLeft: "1px solid var(--border)", paddingLeft: "2.5rem", height: "32px", alignItems: "center" }}>
-          <Link href="/" style={{ 
-            color: pathname === "/" ? "var(--text)" : "var(--muted)",
-            fontWeight: pathname === "/" ? 600 : 500,
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            position: "relative"
-          }}>
-            Overview
-            {pathname === "/" && (
-              <span style={{ position: "absolute", bottom: "-6px", left: 0, width: "100%", height: "2px", background: "var(--gradient-aurora)", borderRadius: "2px" }} />
-            )}
-          </Link>
-          <Link href="/trade" style={{ 
-            color: pathname === "/trade" ? "var(--text)" : "var(--muted)",
-            fontWeight: pathname === "/trade" ? 600 : 500,
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            position: "relative"
-          }}>
-            Trade
-            {pathname === "/trade" && (
-              <span style={{ position: "absolute", bottom: "-6px", left: 0, width: "100%", height: "2px", background: "var(--gradient-aurora)", borderRadius: "2px" }} />
-            )}
-          </Link>
+        <nav className="site-nav" aria-label="Primary navigation">
+          <Link href="/" className={`nav-link ${pathname === "/" ? "is-active" : ""}`}>Overview</Link>
+          <Link href="/trade" className={`nav-link ${pathname === "/trade" ? "is-active" : ""}`}>Trade</Link>
         </nav>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      <div className="header-actions">
         {isConnected ? (
           <>
-            {onTarget ? (
-              <span className="badge badge-live">● {TARGET_CHAIN_LABEL}</span>
-            ) : wrongNetwork ? (
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={isSwitching}
-                onClick={handleSwitch}
-                title={`Switch from chain ${chainId} to ${TARGET_CHAIN_ID}`}
-              >
-                {isSwitching ? "Switching…" : `⚠ Switch to ${TARGET_CHAIN_LABEL}`}
+            {wrongNetwork ? (
+              <button type="button" className="btn btn-danger" disabled={isSwitching} onClick={() => switchChain?.({ chainId: TARGET_CHAIN_ID })}>
+                {isSwitching ? "Switching" : `Switch to ${TARGET_CHAIN_LABEL}`}
               </button>
             ) : (
-              <span className="badge">● checking network…</span>
+              <span className="badge"><span className="pulse-dot" />{onTarget ? TARGET_CHAIN_LABEL : "Checking network"}</span>
             )}
-            <button
-              className="btn btn-secondary"
-              disabled={isMinting}
-              onClick={handleGetTokens}
-              style={{ marginRight: "0.5rem" }}
-            >
-              {isMinting ? "Minting…" : "Get Tokens"}
-            </button>
-            <span className="badge mono" style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", background: "rgba(0,0,0,0.2)" }}>{short}</span>
-            <button className="btn btn-ghost" onClick={() => disconnect()}>
-              Disconnect
-            </button>
+            <button className="btn btn-secondary" disabled={isMinting} onClick={handleGetTokens}>{isMinting ? "Requesting" : "Test tokens"}</button>
+            <span className="badge mono">{short}</span>
+            <button className="btn btn-ghost" onClick={() => disconnect()}>Disconnect</button>
           </>
         ) : (
           <>
-            <span className="badge badge-live" style={{ marginRight: "0.5rem" }}>● {TARGET_CHAIN_LABEL}</span>
-            <button
-              className="btn btn-primary"
-              disabled={isPending}
-              onClick={handleConnect}
-            >
-              {isPending ? "Connecting…" : "Connect Wallet"}
-            </button>
+            <span className="badge"><span className="pulse-dot" />{TARGET_CHAIN_LABEL}</span>
+            <button className="btn btn-primary" disabled={isPending} onClick={handleConnect}>{isPending ? "Connecting" : "Connect wallet"}</button>
           </>
         )}
       </div>
