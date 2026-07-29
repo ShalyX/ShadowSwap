@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Space_Mono } from "next/font/google";
+import { Archivo_Black, IBM_Plex_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const archivoBlack = Archivo_Black({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+const plex = IBM_Plex_Sans({
+  weight: ["400", "500", "600"],
+  subsets: ["latin"],
+  variable: "--font-body",
+});
 const spaceMono = Space_Mono({ 
   weight: ["400", "700"],
   subsets: ["latin"], 
@@ -21,8 +30,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${spaceMono.variable}`}>
-      <body style={{ fontFamily: "var(--font-inter), sans-serif" }}>
+    <html lang="en" className={`${archivoBlack.variable} ${plex.variable} ${spaceMono.variable}`}>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

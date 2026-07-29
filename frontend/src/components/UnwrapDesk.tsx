@@ -141,91 +141,33 @@ export function UnwrapDesk() {
   };
 
   return (
-    <div className="card" style={{ padding: "1.75rem", marginTop: "1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-        <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--aurora-start)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <LockIcon size={18} /> Manage Balances
-        </h2>
-        <span className="badge">Unwrap cSETH</span>
-      </div>
+    <section className="balance-instrument">
+      <header>
+        <span className="section-label">CONFIDENTIAL BALANCE</span>
+        <h2>Bring value<br />back through.</h2>
+      </header>
 
-      {/* Confidential Balance Box */}
-      <div style={{ padding: "0.85rem 1rem", background: "var(--bg-elevated)", borderRadius: "12px", border: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: "0.8rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-              Confidential cSETH Balance
-            </div>
-            <div className="mono" style={{ fontSize: "1.2rem", fontWeight: "bold", marginTop: "0.2rem", color: decryptedCSETH !== null ? "var(--aurora-start)" : "var(--text)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              {decryptedCSETH !== null ? (
-                `${Number(decryptedCSETH).toFixed(4)} cSETH`
-              ) : (
-                <>
-                  <LockIcon size={16} color="var(--aurora-start)" /> Encrypted Nox Handle
-                </>
-              )}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleDecryptBalance}
-            disabled={!isConnected || decryptingBal}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem", border: "1px solid var(--border)", gap: "0.4rem" }}
-          >
-            <LockIcon size={12} /> {decryptingBal ? "Decrypting..." : decryptedCSETH !== null ? "↻ Refresh" : "Reveal Balance"}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gap: "1rem" }}>
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
-            <label className="label" style={{ margin: 0 }}>Amount to Unwrap (cSETH)</label>
-            {decryptedCSETH !== null && Number(decryptedCSETH) > 0 && (
-              <button
-                type="button"
-                onClick={() => setAmount(decryptedCSETH)}
-                style={{ background: "none", border: "none", color: "var(--aurora-start)", fontSize: "0.78rem", cursor: "pointer", fontWeight: 600 }}
-              >
-                Use Max ({Number(decryptedCSETH).toFixed(4)})
-              </button>
-            )}
-          </div>
-          <div style={{ position: "relative" }}>
-            <input
-              type="number"
-              className="input mono"
-              placeholder="0.0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              style={{ paddingRight: "4rem", fontSize: "1.2rem", height: "3.2rem" }}
-            />
-            <span style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--muted)", fontWeight: 600, zIndex: 10 }}>
-              cSETH
-            </span>
-          </div>
-          <p style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-            Unwrapping converts confidential cSETH back into public sETH in your wallet.
-          </p>
-        </div>
-
-        <button
-          className="btn btn-ghost"
-          disabled={!isConnected || !ready || busy || !amount}
-          onClick={handleUnwrap}
-          style={{ padding: "1rem", fontSize: "1.05rem", width: "100%", border: "1px solid var(--border)" }}
-        >
-          {busy ? "Processing..." : "Unwrap to Public sETH"}
+      <div className="concealed-balance">
+        <span>cSETH balance</span>
+        <strong>{!isConnected ? "Connect wallet" : decryptedCSETH !== null ? `${Number(decryptedCSETH).toFixed(4)} cSETH` : "████████"}</strong>
+        <button type="button" onClick={handleDecryptBalance} disabled={!isConnected || decryptingBal}>
+          {decryptingBal ? "Decrypting" : decryptedCSETH !== null ? "Refresh balance" : "Reveal balance"}
         </button>
-
-        {status && (
-          <div className="mono" style={{ padding: "0.75rem", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: "0.85rem", color: status.startsWith("Error") ? "var(--danger)" : "var(--muted)", wordBreak: "break-word" }}>
-            {status}
-          </div>
-        )}
       </div>
-    </div>
+
+      <label className="unwrap-amount">
+        <span>Amount to make public</span>
+        <div><input type="number" inputMode="decimal" placeholder="0" value={amount} onChange={(event) => setAmount(event.target.value)} /><b>cSETH</b></div>
+      </label>
+
+      {decryptedCSETH !== null && Number(decryptedCSETH) > 0 && <button className="use-balance" onClick={() => setAmount(decryptedCSETH)}>Use full balance · {Number(decryptedCSETH).toFixed(4)}</button>}
+
+      <div className="unwrap-boundary"><span>CONFIDENTIAL</span><i /><span>PUBLIC sETH</span></div>
+      <button className="unwrap-action" disabled={!isConnected || !ready || busy || !amount} onClick={handleUnwrap}>
+        {busy ? "Crossing the boundary" : "Unwrap to public sETH"}
+      </button>
+      <p className="instrument-footnote">Unwrapping produces a public wallet balance. This boundary cannot be hidden.</p>
+      {status && <p className="instrument-status">{status}</p>}
+    </section>
   );
 }

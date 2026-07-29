@@ -1,16 +1,9 @@
 "use client";
 
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
-import {
-  isTargetChain,
-  TARGET_CHAIN_ID,
-  TARGET_CHAIN_LABEL,
-} from "@/lib/chains";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useWriteContract } from "wagmi";
+import { isTargetChain, TARGET_CHAIN_ID, TARGET_CHAIN_LABEL } from "@/lib/chains";
 import Link from "next/link";
-import Image from "next/image";
-import logoImg from "../../public/logo.jpg";
 import { usePathname } from "next/navigation";
-import { useWriteContract } from "wagmi";
 import { faucetAbi } from "@/lib/abis";
 import deployments from "@/lib/deployments.json";
 
@@ -19,19 +12,10 @@ export function Header() {
   const { connectAsync, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
-  const pathname = usePathname();
   const { writeContract, isPending: isMinting } = useWriteContract();
+  const pathname = usePathname();
 
-  const handleGetTokens = () => {
-    writeContract({
-      address: deployments.contracts.faucet as `0x${string}`,
-      abi: faucetAbi,
-      functionName: "claim",
-    });
-  };
-
-  const short =
-    address != null ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
+  const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
   const onTarget = isConnected && isTargetChain(chainId);
   const wrongNetwork = isConnected && chainId != null && !isTargetChain(chainId);
 
@@ -40,123 +24,45 @@ export function Header() {
     if (!connector) return;
     try {
       await connectAsync({ connector });
-    } catch (e) {
-      console.warn("Wallet connect notice:", e);
+    } catch (error) {
+      console.warn("Wallet connect notice:", error);
     }
   };
 
-  const handleSwitch = () => {
-    switchChain?.({ chainId: TARGET_CHAIN_ID });
-  };
-
   return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "2rem 0",
-        gap: "1rem",
-        flexWrap: "wrap",
-        borderBottom: "1px solid var(--border)",
-        marginBottom: "3rem",
-        position: "relative",
-        zIndex: 10
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "2.5rem" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.75rem", opacity: 1 }}>
-          <Image
-            src={logoImg}
-            alt="ShadowSwap"
-            width={36}
-            height={36}
-            style={{
-              borderRadius: "8px",
-              objectFit: "cover",
-              border: "1px solid var(--border)",
-              display: "block"
-            }}
-          />
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "1.2rem", letterSpacing: "0.1em", color: "var(--text)", textTransform: "uppercase" }}>
-              ShadowSwap
-            </div>
-          </div>
-        </Link>
-        
-        <nav style={{ display: "flex", gap: "2rem", borderLeft: "1px solid var(--border)", paddingLeft: "2.5rem", height: "32px", alignItems: "center" }}>
-          <Link href="/" style={{ 
-            color: pathname === "/" ? "var(--text)" : "var(--muted)",
-            fontWeight: pathname === "/" ? 600 : 500,
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            position: "relative"
-          }}>
-            Overview
-            {pathname === "/" && (
-              <span style={{ position: "absolute", bottom: "-6px", left: 0, width: "100%", height: "2px", background: "var(--gradient-aurora)", borderRadius: "2px" }} />
-            )}
-          </Link>
-          <Link href="/trade" style={{ 
-            color: pathname === "/trade" ? "var(--text)" : "var(--muted)",
-            fontWeight: pathname === "/trade" ? 600 : 500,
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            position: "relative"
-          }}>
-            Trade
-            {pathname === "/trade" && (
-              <span style={{ position: "absolute", bottom: "-6px", left: 0, width: "100%", height: "2px", background: "var(--gradient-aurora)", borderRadius: "2px" }} />
-            )}
-          </Link>
-        </nav>
-      </div>
+    <header className="veil-header">
+      <Link href="/" className="veil-wordmark" aria-label="ShadowSwap home">
+        <span>SHADOW</span><span>SWAP</span>
+      </Link>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      <nav className="veil-nav" aria-label="Primary navigation">
+        <Link href="/" data-active={pathname === "/"}>Thesis</Link>
+        <Link href="/trade" data-active={pathname === "/trade"}>Trade</Link>
+      </nav>
+
+      <div className="wallet-actions">
         {isConnected ? (
           <>
-            {onTarget ? (
-              <span className="badge badge-live">● {TARGET_CHAIN_LABEL}</span>
-            ) : wrongNetwork ? (
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={isSwitching}
-                onClick={handleSwitch}
-                title={`Switch from chain ${chainId} to ${TARGET_CHAIN_ID}`}
-              >
-                {isSwitching ? "Switching…" : `⚠ Switch to ${TARGET_CHAIN_LABEL}`}
+            {wrongNetwork ? (
+              <button className="veil-button veil-button-alert" disabled={isSwitching} onClick={() => switchChain?.({ chainId: TARGET_CHAIN_ID })}>
+                {isSwitching ? "Switching" : `Switch to ${TARGET_CHAIN_LABEL}`}
               </button>
             ) : (
-              <span className="badge">● checking network…</span>
+              <span className="network-line">{onTarget ? TARGET_CHAIN_LABEL : "Checking network"}</span>
             )}
             <button
-              className="btn btn-secondary"
+              className="veil-link-button faucet-action"
               disabled={isMinting}
-              onClick={handleGetTokens}
-              style={{ marginRight: "0.5rem" }}
+              onClick={() => writeContract({ address: deployments.contracts.faucet as `0x${string}`, abi: faucetAbi, functionName: "claim" })}
             >
-              {isMinting ? "Minting…" : "Get Tokens"}
+              {isMinting ? "Minting" : "Get tokens"}
             </button>
-            <span className="badge mono" style={{ padding: "0.5rem 1rem", fontSize: "0.85rem", background: "rgba(0,0,0,0.2)" }}>{short}</span>
-            <button className="btn btn-ghost" onClick={() => disconnect()}>
-              Disconnect
-            </button>
+            <button className="wallet-address" onClick={() => disconnect()} title="Disconnect wallet">{short}</button>
           </>
         ) : (
-          <>
-            <span className="badge badge-live" style={{ marginRight: "0.5rem" }}>● {TARGET_CHAIN_LABEL}</span>
-            <button
-              className="btn btn-primary"
-              disabled={isPending}
-              onClick={handleConnect}
-            >
-              {isPending ? "Connecting…" : "Connect Wallet"}
-            </button>
-          </>
+          <button className="veil-button" disabled={isPending} onClick={handleConnect}>
+            {isPending ? "Opening wallet" : "Connect wallet"}
+          </button>
         )}
       </div>
     </header>
