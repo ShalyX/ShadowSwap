@@ -66,12 +66,14 @@ export default function TradePage() {
         {!mounted ? (
           <div className="instrument-loading">Preparing the instrument</div>
         ) : activeTab === "trade" ? (
-          <div className="trade-instrument-grid">
-            <SwapDesk />
-            <aside className="side-instrument">
-              {isAdmin ? <BatchDesk /> : <UnwrapDesk />}
-            </aside>
-          </div>
+          isAdmin ? (
+            <div className="solver-instrument"><BatchDesk /></div>
+          ) : (
+            <div className="trade-instrument-grid">
+              <SwapDesk />
+              <aside className="side-instrument"><UnwrapDesk /></aside>
+            </div>
+          )
         ) : activeTab === "vault" ? (
           <div className="single-instrument"><UnwrapDesk /></div>
         ) : (

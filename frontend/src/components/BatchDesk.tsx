@@ -8,7 +8,7 @@ import {
   useWalletClient,
   usePublicClient,
 } from "wagmi";
-import { type Address, type Hash, isAddress, zeroAddress, formatUnits } from "viem";
+import { type Address, type Hash, isAddress, zeroAddress } from "viem";
 import deployments from "@/lib/deployments.json";
 import { intentBookAbi, executorAbi } from "@/lib/abis";
 import {
@@ -44,7 +44,7 @@ export function BatchDesk() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
-  const { writeContractAsync, isPending } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
 
   const c = deployments.contracts as Record<string, string>;
   const deploymentConfig = deployments.config as { executorSecurityVersion?: number };
@@ -55,6 +55,7 @@ export function BatchDesk() {
 
   const [batchIdInput, setBatchIdInput] = useState("");
   const [preview, setPreview] = useState<{
+    batchId: number;
     allIds: bigint[];
     intents: IntentClearAmounts[];
     isSealed: boolean;
@@ -115,6 +116,7 @@ export function BatchDesk() {
         effectiveBatchId
       );
       setPreview({
+        batchId: effectiveBatchId,
         allIds: data.allIds,
         intents: data.intents,
         isSealed: data.isSealed,
@@ -235,234 +237,48 @@ export function BatchDesk() {
       : null;
 
   return (
-    <div className="card" style={{ padding: "1.75rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+    <section className="solver-console" aria-label="Batch settlement console">
+      <header className="solver-console-head">
+        <div><span className="section-label">AUTHORIZED SOLVER</span><h2>Settle the crowd<br />as one move.</h2></div>
+        <div className="solver-thesis"><span data-ready={ready}>{ready ? "EXECUTOR V4 READY" : "DEPLOYMENT UNAVAILABLE"}</span><p>Each confidential intent unwraps separately. Compatible inputs cross the public AMM once, then return pro-rata behind the veil.</p></div>
+      </header>
+
+      <div className="solver-ledger" aria-label="Batch timing">
+        <div><span>Current intake</span><strong>{currentBatchId != null ? String(currentBatchId) : "—"}</strong></div>
+        <div><span>Seal window</span><strong>{windowSec}s</strong></div>
+        <div><span>Open age</span><strong>{openAge != null ? `${openAge}s` : "—"}</strong></div>
+      </div>
+
+      <div className="solver-controls">
+        <label><span>Batch to inspect</span><input placeholder={currentBatchId != null ? `Default ${currentBatchId}` : "Batch id"} inputMode="numeric" value={batchIdInput} onChange={(event) => setBatchIdInput(event.target.value)} /></label>
         <div>
-          <h2 style={{ margin: 0, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: "1.2rem", color: "var(--aurora-start)" }}>Batch settlement</h2>
-          <p style={{ color: "var(--muted)", margin: "0.4rem 0 0" }}>
-            Seal window → unwrap each intent → <strong style={{ color: "var(--text)" }}>one</strong>{" "}
-            AMM swap → pro-rata re-shield
-          </p>
+          <button disabled={!ready || busy} onClick={() => currentBatchId != null && setBatchIdInput(String(currentBatchId))}>Use current</button>
+          <button disabled={!ready || busy} onClick={loadPreview}>Inspect</button>
+          <button className="solver-seal" disabled={!ready || !isConnected || busy} onClick={sealBatch}>Seal current</button>
         </div>
-        <span className="badge">{ready ? "batch ready" : "awaiting deploy"}</span>
       </div>
 
-      <div style={{ display: "grid", gap: "0.9rem", marginTop: "1.25rem" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: "0.75rem",
-            fontSize: "0.9rem",
-            color: "var(--muted)",
-          }}
-        >
-          <div className="card" style={{ padding: "0.75rem", background: "var(--bg-elevated)", border: "none" }}>
-            Current batch
-            <div className="mono" style={{ color: "var(--text)", marginTop: 4 }}>
-              {currentBatchId != null ? String(currentBatchId) : "—"}
-            </div>
+      {preview ? (
+        <section className="batch-manifest">
+          <header>
+            <div><span className="section-label">VIEWING BATCH {preview.batchId}</span><h3>{preview.intents.length} of {preview.allIds.length} intents can move together.</h3></div>
+            <div className="batch-state"><span>{preview.isExecuted ? "EXECUTED" : preview.isSealed ? "SEALED" : "OPEN"}</span>{preview.pairLabel && <code title={preview.pairLabel}>{preview.pairLabel.slice(0, 22)}…</code>}</div>
+          </header>
+          {preview.intents.length === 0 ? <p className="solver-empty">No live same-pair intents remain in this batch.</p> : (
+            <div className="intent-manifest">{preview.intents.map((intent) => { const key = intent.intentId.toString(); return (
+              <label key={key}><input type="checkbox" checked={!!selected[key]} onChange={(event) => setSelected((state) => ({ ...state, [key]: event.target.checked }))} /><strong>#{key}</strong><span>{short(intent.user)}</span><code>{short(intent.tokenIn)} → {short(intent.tokenOut)}</code><b>{STATUS[intent.status] ?? intent.status}</b></label>
+            ); })}</div>
+          )}
+          <div className="batch-execute">
+            <button disabled={!ready || !isConnected || !isAuthorizedSolver || busy || preview.intents.length === 0 || preview.isExecuted} onClick={runBatch}>{busy ? "SETTLEMENT IN PROGRESS" : "RUN ONE PUBLIC AMM SWAP"}</button>
+            <p>{!isConnected ? "Connect the authorized solver wallet." : !isAuthorizedSolver ? "Connected wallet is not an authorized solver." : "Selected users must still have active executor grants."}</p>
           </div>
-          <div className="card" style={{ padding: "0.75rem", background: "var(--bg-elevated)", border: "none" }}>
-            Window
-            <div className="mono" style={{ color: "var(--text)", marginTop: 4 }}>
-              {windowSec}s
-            </div>
-          </div>
-          <div className="card" style={{ padding: "0.75rem", background: "var(--bg-elevated)", border: "none" }}>
-            Open age
-            <div className="mono" style={{ color: "var(--text)", marginTop: 4 }}>
-              {openAge != null ? `${openAge}s` : "—"}
-            </div>
-          </div>
-        </div>
+        </section>
+      ) : <div className="solver-awaiting"><span>NO BATCH LOADED</span><p>Inspect the current intake or enter an older batch ID. Current-chain state and inspected state are shown separately.</p></div>}
 
-        <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "1fr auto auto auto" }}>
-          <input
-            className="input"
-            placeholder={
-              currentBatchId != null
-                ? `Batch id (default current: ${currentBatchId})`
-                : "Batch id"
-            }
-            value={batchIdInput}
-            onChange={(e) => setBatchIdInput(e.target.value)}
-          />
-          <button
-            className="btn btn-ghost"
-            disabled={!ready || busy}
-            onClick={() => {
-              if (currentBatchId != null) setBatchIdInput(String(currentBatchId));
-            }}
-          >
-            Use current
-          </button>
-          <button className="btn btn-ghost" disabled={!ready || busy} onClick={loadPreview}>
-            Preview
-          </button>
-          <button className="btn btn-ghost" disabled={!ready || !isConnected || busy} onClick={sealBatch}>
-            Seal
-          </button>
-        </div>
-
-        {preview && (
-          <div
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: "0.85rem",
-              background: "var(--bg-elevated)",
-            }}
-          >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.65rem" }}>
-              <span className="badge">
-                {preview.isSealed ? "sealed" : "open"}
-                {preview.isExecuted ? " · executed" : ""}
-              </span>
-              <span className="badge">
-                {preview.intents.length} / {preview.allIds.length} settleable (same pair)
-              </span>
-              {preview.pairLabel && (
-                <span className="badge mono" title={preview.pairLabel}>
-                  pair {preview.pairLabel.slice(0, 18)}…
-                </span>
-              )}
-            </div>
-
-            {preview.intents.length === 0 ? (
-              <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: 0 }}>
-                No Pending/Batched intents. Submit encrypted intents on the swap desk first (same
-                direction enables one aggregate pool interaction).
-              </p>
-            ) : (
-              <div style={{ display: "grid", gap: "0.4rem" }}>
-                {preview.intents.map((it) => {
-                  const key = it.intentId.toString();
-                  return (
-                    <label
-                      key={key}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "auto 1fr auto",
-                        gap: "0.65rem",
-                        alignItems: "center",
-                        padding: "0.45rem 0.55rem",
-                        borderRadius: 8,
-                        border: "1px solid var(--border)",
-                        fontSize: "0.82rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!!selected[key]}
-                        onChange={(e) =>
-                          setSelected((s) => ({ ...s, [key]: e.target.checked }))
-                        }
-                      />
-                      <span className="mono">
-                        #{key} · {short(it.user)} · {STATUS[it.status] ?? it.status}
-                      </span>
-                      <span style={{ color: "var(--muted)" }}>
-                        {short(it.tokenIn)}→{short(it.tokenOut)}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-
-            <div style={{ marginTop: "0.85rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button
-                className="btn btn-primary"
-                disabled={!ready || !isConnected || !isAuthorizedSolver || busy || preview.intents.length === 0 || preview.isExecuted}
-                onClick={runBatch}
-              >
-                {busy ? "Settling batch…" : "Run batch settle"}
-              </button>
-              <span style={{ color: "var(--muted)", fontSize: "0.78rem", alignSelf: "center" }}>
-                Requires an on-chain authorized solver wallet and active user operator grants.
-              </span>
-            </div>
-          </div>
-        )}
-
-        {settle && (
-          <div
-            style={{
-              display: "grid",
-              gap: "0.5rem",
-              padding: "0.85rem",
-              borderRadius: 12,
-              border: "1px solid var(--border)",
-              background: "var(--bg-elevated)",
-            }}
-          >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
-              <span className="badge">{STEP_LABEL[settle.step]}</span>
-              {settle.progressIndex != null && settle.progressTotal != null && (
-                <span className="badge">
-                  intent {settle.progressIndex}/{settle.progressTotal}
-                </span>
-              )}
-              {settle.netIn != null && (
-                <span className="badge badge-live">
-                  netIn {settle.netIn.toString()}
-                  {settle.clears[0] &&
-                    ` (~${formatUnits(settle.netIn, settle.clears[0].tokenIn.toLowerCase() === (c.sUSD as string).toLowerCase() ? 6 : 18)})`}
-                </span>
-              )}
-              {settle.step === "done" && (
-                <span className="badge badge-live">single AMM touch</span>
-              )}
-            </div>
-            <ol
-              className="mono"
-              style={{
-                margin: 0,
-                paddingLeft: "1.2rem",
-                fontSize: "0.78rem",
-                color: "var(--muted)",
-                maxHeight: 200,
-                overflow: "auto",
-              }}
-            >
-              {settle.log.map((line, i) => (
-                <li
-                  key={i}
-                  style={{
-                    marginBottom: 2,
-                    color: line.startsWith("Error") ? "var(--danger)" : undefined,
-                  }}
-                >
-                  {line}
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-
-        {status && (
-          <div
-            className="mono"
-            style={{
-              padding: "0.75rem",
-              borderRadius: 12,
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border)",
-              fontSize: "0.82rem",
-              wordBreak: "break-word",
-            }}
-          >
-            {status}
-          </div>
-        )}
-
-        <p style={{ color: "var(--muted)", fontSize: "0.82rem", margin: 0 }}>
-          Demo tip: submit 2+ intents same direction within the {windowSec}s window, seal, then run
-          batch settle. Chain observers see one pool trade instead of N sized swaps.
-        </p>
-      </div>
-    </div>
+      {settle && <section className="settlement-trace"><header><span>{STEP_LABEL[settle.step]}</span>{settle.progressIndex != null && settle.progressTotal != null && <b>{settle.progressIndex}/{settle.progressTotal}</b>}{settle.step === "done" && <strong>ONE AMM TOUCH</strong>}</header><ol>{settle.log.map((line, index) => <li key={index} data-error={line.startsWith("Error")}>{line}</li>)}</ol></section>}
+      {status && <output className="solver-status">{status}</output>}
+      <footer className="solver-footnote"><span>OPERATOR PATH</span><p>This is a browser-driven solver console. It does not run autonomously after the tab closes.</p></footer>
+    </section>
   );
 }
