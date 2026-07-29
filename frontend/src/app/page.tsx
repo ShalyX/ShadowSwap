@@ -55,7 +55,7 @@ export default function HomePage() {
       <section style={{ margin: "2rem 0 6rem", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
         <div className="badge badge-live" style={{ marginBottom: "2rem", padding: "0.55rem 1.4rem", fontSize: "0.85rem", letterSpacing: "0.05em", gap: "0.5rem" }}>
           <SparklesIcon size={14} color="var(--aurora-start)" /> WTF Hackathon · iExec Nox Protocol
-          {deployed ? " · Hardened v2 live on Sepolia" : " · Hardened redeploy pending"}
+          {deployed ? " · Hardened v4 live on Sepolia" : " · Hardened redeploy pending"}
         </div>
 
         <h1
