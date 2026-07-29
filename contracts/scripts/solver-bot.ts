@@ -179,8 +179,8 @@ async function sleep(ms: number) {
 
 async function main() {
   const dep = loadDeployment();
-  if (dep.config?.executorSecurityVersion !== 2) {
-    throw new Error("Refusing settlement: deployment is not executor security version 2");
+  if (dep.config?.executorSecurityVersion !== 4) {
+    throw new Error("Refusing settlement: deployment is not executor security version 4");
   }
   const executor = dep.contracts.executor as Address;
   const intentBook = dep.contracts.intentBook as Address;

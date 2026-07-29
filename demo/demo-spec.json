@@ -1,0 +1,63 @@
+{
+  "viewport": { "width": 1440, "height": 900 },
+  "record_size": { "width": 1440, "height": 900 },
+  "headless": true,
+  "slow_mo_ms": 55,
+  "locale": "en-US",
+  "color_scheme": "dark",
+  "final_pause_ms": 2500,
+  "mask_selectors": [],
+  "steps": [
+    {
+      "action": "goto",
+      "url": "https://shadowswap-app.vercel.app",
+      "caption": "Encrypted before execution. Composable at settlement.",
+      "pause_after_ms": 7000
+    },
+    {
+      "action": "click",
+      "role": "link",
+      "name": "Launch App",
+      "caption": "Open the live Sepolia trade console",
+      "pause_after_ms": 5000
+    },
+    {
+      "action": "scroll",
+      "y": 620,
+      "caption": "Selective disclosure grants view rights, never spending rights",
+      "pause_after_ms": 6500
+    },
+    {
+      "action": "goto",
+      "url": "https://eth-sepolia.blockscout.com/tx/0x6d45deb0db9bb4b68e2762255bfacd6bd2474c5c83f8dd671b2e9cf4126d7b09",
+      "caption": "Live proof: batch 17 settled successfully on Sepolia",
+      "pause_after_ms": 9000,
+      "timeout_ms": 30000
+    },
+    {
+      "action": "wait_for",
+      "text": "Transaction details",
+      "caption": "One transaction moved 12 sUSD into the AMM",
+      "pause_after_ms": 5500,
+      "timeout_ms": 30000
+    },
+    {
+      "action": "scroll",
+      "y": 560,
+      "caption": "0.005718995683194033 sETH returned from one public swap",
+      "pause_after_ms": 8000
+    },
+    {
+      "action": "scroll",
+      "y": 380,
+      "caption": "Two pro-rata cSETH outputs were minted with encrypted balances",
+      "pause_after_ms": 8000
+    },
+    {
+      "action": "goto",
+      "url": "https://shadowswap-app.vercel.app",
+      "caption": "ShadowSwap: pre-trade privacy with public AMM composability",
+      "pause_after_ms": 8500
+    }
+  ]
+}

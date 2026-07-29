@@ -17,7 +17,7 @@ export function SwapDesk() {
   
   const contracts = deployments.contracts as Record<string, string>;
   const deploymentConfig = deployments.config as { executorSecurityVersion?: number };
-  const hardenedExecutor = deploymentConfig.executorSecurityVersion === 2;
+  const hardenedExecutor = deploymentConfig.executorSecurityVersion === 4;
   const ready = contracts.intentBook && isAddress(contracts.intentBook) && hardenedExecutor;
 
   const [isReverse, setIsReverse] = useState(false); // false: sUSD -> sETH, true: sETH -> sUSD
@@ -319,7 +319,7 @@ export function SwapDesk() {
 
       {!hardenedExecutor && (
         <div style={{ marginBottom: "1rem", padding: "0.75rem", border: "1px solid var(--danger)", borderRadius: "10px", color: "var(--danger)", fontSize: "0.82rem" }}>
-          Legacy executor paused. Deploy security version 2 before approving or submitting intents.
+          Legacy executor paused. Deploy security version 4 before approving or submitting intents.
         </div>
       )}
 

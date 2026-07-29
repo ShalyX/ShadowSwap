@@ -49,7 +49,7 @@ export function BatchDesk() {
   const c = deployments.contracts as Record<string, string>;
   const deploymentConfig = deployments.config as { executorSecurityVersion?: number };
   const ready =
-    deploymentConfig.executorSecurityVersion === 2 &&
+    deploymentConfig.executorSecurityVersion === 4 &&
     hasDeployed(c.intentBook) &&
     hasDeployed(c.executor);
 

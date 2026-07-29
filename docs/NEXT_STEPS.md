@@ -1,76 +1,43 @@
-# Next steps to ship (before Aug 1)
+# Release status
 
-## Hardened Sepolia redeploy required
+## Live Sepolia deployment
 
-Addresses in `deployments/sepolia.json` / `frontend/src/lib/deployments.json` are the legacy deployment. The frontend keeps transactional controls disabled until a v2 deployment manifest is generated.
+Security version 4 is deployed and enabled in both deployment manifests.
 
-1. **Pin Handle SDK** (required — older versions deprecated):
-   ```bash
-   cd frontend
-   npm i @iexec-nox/handle@0.1.0-beta.13
-   ```
-   Ethereum Sepolia is **built into** beta.13 — wallet on chainId `11155111` auto-loads gateway + subgraph + NoxCompute.  
+- Intent book: `0x0a4c20c67775b126dd4b6c34479613771c517c44`
+- Executor: `0xc5633e64da98ca9039eeb9f5661eca5653ede0d6`
+- Executor runtime hash: `0x71280e3cda1dd701cab7d4311df0683c5f3b0592ebc6f7eb6725b5b4763b7c49`
+- Batch window: 300 seconds
+- Authorized solver: `0x709f18f797347fbb8d53fb60567892751dd14b11`
+- Golden batch receipt: `0x7f3489df7a6ed2e9e035b271f574a7953c5db6a3d7867087ed5372c5c1bb74f1`
+- Evidence: `evidence/golden-batch/v4/latest.json`
+- Source: all deployment contracts verified on Blockscout
 
-2. Run UI: `cd frontend && npm run dev` (wallet on **Ethereum Sepolia**)
+## Verified paths
 
-3. Demo:
-   - Solo: faucet → wrap → operator → submit → **Run solo settle**
-   - Batch: submit ≥2 same-pair intents → **Batch settlement** preview → seal → **Run batch settle**
+- Faucet → approve → wrap → operator grant → encrypted intent submission
+- Owner sealing of a two-intent same-pair batch
+- Per-intent pull, public decryption, and unwrap finalization
+- One aggregate `SimpleAMM` swap
+- Pro-rata confidential output wrapping
+- Duplicate unwrap requests rejected
+- Direct wrapper finalization reconciled without locking principal
 
-4. Still join [iExec Discord](https://discord.gg/RXYHBJceMe) for support.
+## Remaining production work
 
-## E2E solo settlement — **wired**
+1. Replace the single deployer/solver key with an operationally separate solver and a multisig owner.
+2. Add a timelock for solver, adapter, intent-book, asset-pair, and rescue administration.
+3. Commission an external contract audit before handling real assets.
+4. Replace demo assets and `SimpleAMM` only after a separate production adapter review.
 
-Desk path: faucet → wrap → operator → encrypted intent → **Run solo settle**.
+## Operator commands
 
-### On-chain steps (`ShadowSwapExecutor`)
-
-| # | Call | What happens |
-|---|------|----------------|
-| 1 | `pullFromIntent(intentId)` | Operator pull of intent `amountIn` handle → executor (size still encrypted) |
-| 2 | `startUnwrapHeld(intentId, cTokenIn, pulledHandle)` | Burn cToken; mark `unwrapRequestId` publicly decryptable |
-| 3 | **Off-chain** `handleClient.publicDecrypt(unwrapRequestId)` | Gateway returns clear amount + `decryptionProof` |
-| 4 | `finalizeUnwrapForIntent(intentId, cTokenIn, unwrapRequestId, proof)` | ERC-20 lands on executor |
-| 5 | `executeSoloAfterUnwrap(...)` | Public AMM swap + `wrap` output to user as cTokenOut |
-
-### How to run
-
-**UI:** enter intent id → **Run solo settle** (progress log in desk).
-
-**CLI:**
 ```bash
 cd contracts
-# after deploy + user has submitted an intent with operator set
-INTENT_ID=1 npx hardhat run scripts/settle-solo.ts --network sepolia
+npm test
+npm run verify:deployment
+npm run deploy:sepolia
+node --import tsx scripts/golden-batch.ts
 ```
 
-Code: `frontend/src/lib/settleSolo.ts`, `contracts/scripts/settle-solo.ts`.
-
-## Batch settlement UI — **wired**
-
-`BatchDesk` + `frontend/src/lib/settleBatch.ts`:
-
-1. Preview batch membership / same-pair cohort  
-2. Optional seal  
-3. Per-intent unwrap (pull → unwrap → publicDecrypt → finalize)  
-4. `executeBatchSamePair` — one demo-AMM swap, pro-rata cTokenOut; individual inputs were already revealed by per-intent public decryption
-
-Requires each intent owner to have set executor as operator on their cTokenIn.
-
-## Demo video script (≤4 min)
-
-1. 0:00 — Problem: public Uniswap leaks size  
-2. 0:30 — Privacy model slide (honest)  
-3. 1:00 — Live: faucet, wrap, submit encrypted intent (show explorer: no amount)  
-4. 2:00 — Grant auditor, decrypt as auditor  
-5. 2:40 — Settle batch/solo, show cToken out  
-6. 3:20 — Architecture + Nox primitives used  
-7. 3:50 — Call to action / GitHub  
-
-## Differentiation checklist before submit
-
-- [ ] Batch with ≥2 intents same pair (show one AMM swap)  
-- [ ] Auditor path in video  
-- [ ] `feedback.md` filled with real gateway notes  
-- [ ] README links to live Sepolia addresses  
-- [ ] X post tags `@iEx_ec`  
+The golden-batch script refuses non-v4 manifests, non-empty target batches, expired or mixed-pair intents, zero min-outs, changed pre-seal membership, and repeat execution against an existing evidence file.

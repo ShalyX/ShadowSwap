@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "network": "sepolia",
+  "chainId": 11155111,
+  "executorSecurityVersion": 3,
+  "deployment": {
+    "deployedAt": "2026-07-29T13:01:16.770Z",
+    "contracts": {
+      "sUSD": "0x0304fd6c36c1d593c1e3e7265ca6c085e1dea974",
+      "sETH": "0xd343fbc8aaab2d068a99b212214993b1e86fa465",
+      "cSUSD": "0x501c8b89e260e8af1a91a3ab5534658f3e823d20",
+      "cSETH": "0xd7516c084c9277cbbe953ea0298e97dd3edb4acb",
+      "simpleAMM": "0x5ebcf8441f97bc32dff5978221aabb169333bd5b",
+      "intentBook": "0xbb716ab923271eb5d17925e9cd66aab86034a101",
+      "executor": "0x69a65d623a0c4ba6bcc3bac44a09b4335bd9112b",
+      "faucet": "0x7717fd321c4898053f932498b39eaf0a75fc51f3",
+      "noxCompute": "0x24Ef36Ec5b626D7DCD09a98F3083c2758F0F77bF",
+      "uniswapV2Router02Sepolia": "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3"
+    }
+  },
+  "startedAt": "2026-07-29T13:01:32.922Z",
+  "signer": "0x709F18F797347FbB8D53Fb60567892751dd14B11",
+  "settlementVenue": "SimpleAMM demo",
+  "batchId": 1,
+  "quotedNetOut": "5981284399134487",
+  "intents": [
+    {
+      "id": "1",
+      "amountIn": "5000000",
+      "minOut": "2242981649675431",
+      "submitTx": "0x3189e182bbf26f3076ed9f03e2980bef9f0df0a92d6cc8754c93751034ae246f",
+      "pullTx": "0xf2f10bc7061584a7472242e4d8d807c1b39432a44432068350907ad8d652420a",
+      "unwrapTx": "0xef8d2fb2ffce67a66e512648bc568b901cf9b8a891baa8d54cbe1845c1607cbc",
+      "unwrapRequestId": "0x0000aa36a72301e1b504963f9495c430b04103c0f813ed417cac02001c859a22",
+      "finalizeTx": "0xcec2e90dd04feee3479d3184724c0e3f6eb6e381616a9dcf4db64aee39958d0b"
+    },
+    {
+      "id": "2",
+      "amountIn": "7000000",
+      "minOut": "3140174309545605",
+      "submitTx": "0x1fb9ee4ebf08905aa52670002867dfc87a3e680e8d854d2c8821102240fab86c",
+      "pullTx": "0x11d66c9a47f690b357b8eb52283599b1f5a5de8b4358cbd58943b68057903038",
+      "unwrapTx": "0xe8b011927ebaf117c6d719acfdce771767a2a39ae6ae9a1b33738dd7a4d7f0c5",
+      "unwrapRequestId": "0x0000aa36a723013f40add460bee2268f777646d1100ece46f1e2dce65491473e",
+      "finalizeTx": "0xcce2512ff231415f4635bde19445a7682aa6b2b2cb9e9214977d7f7479820ae6"
+    }
+  ],
+  "approvalTx": "0x5dadf8b2aa69f2c7f554ee7321a7aa6c2da7c12500a35e451395351a3a5c18a3",
+  "wrapTx": "0xb9e4f253477c1ad8a068fc9d47af645f3e97c0372a72d7e288b273be8cc4724f",
+  "operatorTx": "0xd57a3c2eb5a146a3edb935de1f962a93eecface5477ac9e722422f3d163fa956",
+  "sealTx": "0xeb7eefd7761196e12357136dcfaece59a5257e91d539d9bed15b0d54e5f2b334",
+  "executeTx": "0x1f9e0787c7ac38bb22dcdd0c452065bb370c125bcd39a89d7513b3cb23c5d3f7",
+  "netAmountIn": "12000000",
+  "netAmountOut": "5981284399134487",
+  "blockNumber": "11375672",
+  "gasUsed": "530016",
+  "completedAt": "2026-07-29T13:05:29.545Z"
+}

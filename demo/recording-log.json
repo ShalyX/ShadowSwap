@@ -1,0 +1,66 @@
+{
+  "started_at": "2026-07-28T10:13:52.886Z",
+  "finished_at": "2026-07-28T10:15:50.957Z",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "steps": [
+    {
+      "index": 1,
+      "action": "goto",
+      "status": "ok",
+      "elapsed_ms": 7784,
+      "timestamp": "2026-07-28T10:14:01.046Z"
+    },
+    {
+      "index": 2,
+      "action": "click",
+      "status": "ok",
+      "elapsed_ms": 6764,
+      "timestamp": "2026-07-28T10:14:07.811Z"
+    },
+    {
+      "index": 3,
+      "action": "scroll",
+      "status": "ok",
+      "elapsed_ms": 6726,
+      "timestamp": "2026-07-28T10:14:14.537Z"
+    },
+    {
+      "index": 4,
+      "action": "goto",
+      "status": "ok",
+      "elapsed_ms": 22111,
+      "timestamp": "2026-07-28T10:14:36.648Z"
+    },
+    {
+      "index": 5,
+      "action": "wait_for",
+      "status": "ok",
+      "elapsed_ms": 8832,
+      "timestamp": "2026-07-28T10:14:45.480Z"
+    },
+    {
+      "index": 6,
+      "action": "scroll",
+      "status": "ok",
+      "elapsed_ms": 8467,
+      "timestamp": "2026-07-28T10:14:53.947Z"
+    },
+    {
+      "index": 7,
+      "action": "scroll",
+      "status": "ok",
+      "elapsed_ms": 8444,
+      "timestamp": "2026-07-28T10:15:02.391Z"
+    },
+    {
+      "index": 8,
+      "action": "goto",
+      "status": "ok",
+      "elapsed_ms": 9737,
+      "timestamp": "2026-07-28T10:15:12.128Z"
+    }
+  ]
+}

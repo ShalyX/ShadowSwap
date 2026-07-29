@@ -1,0 +1,38 @@
+1
+00:00:00,000 --> 00:00:08,000
+Public AMM orders expose size and slippage.
+ShadowSwap moves that exposure boundary.
+
+2
+00:00:08,000 --> 00:00:19,000
+Amount in and minimum out stay encrypted as iExec Nox handles
+while the intent waits in the book.
+
+3
+00:00:19,000 --> 00:00:31,000
+Same-pair intents share a batch window.
+The solver performs one public AMM swap.
+
+4
+00:00:31,000 --> 00:00:44,000
+Each user’s output is immediately re-shielded
+into a confidential token balance.
+
+5
+00:00:44,000 --> 00:00:58,000
+Live proof: two intents, 5 + 7 sUSD,
+one successful 12 sUSD AMM transaction.
+
+6
+00:00:58,000 --> 00:01:10,000
+The output split pro rata into two confidential cSETH balances.
+The public AMM leg remains visible.
+
+7
+00:01:10,000 --> 00:01:22,000
+Pre-trade privacy. Batch obfuscation. Selective auditor access.
+Private balances after settlement.
+
+8
+00:01:22,000 --> 00:01:23,000
+Live Sepolia evidence is ready for review.
