@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useAccount, useWalletClient, usePublicClient, useWriteContract, useReadContract } from "wagmi";
 import { parseUnits, formatUnits, isAddress, Address, decodeEventLog } from "viem";
 import deployments from "@/lib/deployments.json";
-import { intentBookAbi, erc20Abi, erc7984Abi } from "@/lib/abis";
+import { intentBookAbi, erc20Abi, erc7984Abi, ammAbi } from "@/lib/abis";
 import { encryptAmount } from "@/lib/nox";
+import { applySlippageToQuote } from "@/lib/quote";
 import { formatError } from "@/lib/errors";
 import { ShieldIcon, LockIcon, ZapIcon, ArrowDownUpIcon, ExternalLinkIcon, CheckCircleIcon } from "@/components/Icons";
 
@@ -80,22 +81,33 @@ export function SwapDesk() {
   const intentBook = contracts.intentBook as Address;
   const executor = contracts.executor as Address;
 
-  const estimatedOutput = amount && !isNaN(Number(amount)) && Number(amount) > 0
-    ? isReverse ? Number(amount) * ethPrice : Number(amount) / ethPrice
-    : 0;
+  let quoteAmountIn = 0n;
+  try {
+    if (amount && Number(amount) > 0) quoteAmountIn = parseUnits(amount, inDecimals);
+  } catch {
+    quoteAmountIn = 0n;
+  }
+
+  const { data: routeAmounts } = useReadContract({
+    address: contracts.simpleAMM as Address,
+    abi: ammAbi,
+    functionName: "getAmountsOut",
+    args: [quoteAmountIn, [tokenIn, tokenOut]],
+    query: { enabled: !!ready && quoteAmountIn > 0n },
+  });
+  const quotedOutput = routeAmounts?.[routeAmounts.length - 1] ?? 0n;
+  const estimatedOutput = Number(formatUnits(quotedOutput, outDecimals));
 
   useEffect(() => {
-    if (slippagePct !== null && estimatedOutput > 0) {
-      const min = estimatedOutput * (1 - slippagePct / 100);
-      setMinOut(min.toFixed(isReverse ? 2 : 6));
+    if (slippagePct !== null && quotedOutput > 0n) {
+      setMinOut(formatUnits(applySlippageToQuote(quotedOutput, slippagePct), outDecimals));
     }
-  }, [amount, slippagePct, estimatedOutput, isReverse]);
+  }, [slippagePct, quotedOutput, outDecimals]);
 
   const handleSlippageClick = (pct: number) => {
     setSlippagePct(pct);
-    if (estimatedOutput > 0) {
-      const min = estimatedOutput * (1 - pct / 100);
-      setMinOut(min.toFixed(isReverse ? 2 : 6));
+    if (quotedOutput > 0n) {
+      setMinOut(formatUnits(applySlippageToQuote(quotedOutput, pct), outDecimals));
     }
   };
 
