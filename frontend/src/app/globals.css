@@ -350,6 +350,25 @@ button { color: inherit; }
 .solver-empty { margin: 34px 0 0; padding: 28px 0; border-block: 1px solid var(--line); color: var(--steel); }
 .solver-footnote { display: grid; grid-template-columns: .4fr 1fr; gap: 30px; padding: 32px 0 10px; }
 
+/* Owner-signed recovery register */
+.balance-stack { border-bottom: 1px solid var(--line); }
+.recovery-desk { width: min(100%, 980px); margin: 0 auto; padding: 0 0 72px; }
+.recovery-desk > header { display: grid; grid-template-columns: 1fr minmax(260px, 380px); gap: 40px; align-items: end; padding: 52px 0 34px; border-top: 1px solid var(--line); }
+.recovery-desk h2 { margin: 14px 0 0; font: 400 clamp(38px, 4vw, 62px)/.88 var(--font-display), sans-serif; letter-spacing: -.05em; text-transform: uppercase; }
+.recovery-desk > header p { margin: 0; color: var(--steel); font-size: 13px; line-height: 1.6; }
+.recovery-register { border-top: 1px solid var(--line); }
+.recovery-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(180px, 230px); align-items: center; gap: 24px; min-height: 88px; border-bottom: 1px solid var(--line); }
+.recovery-row > strong { font: 400 30px/1 var(--font-display), sans-serif; letter-spacing: -.04em; }
+.recovery-row > div { min-width: 0; }
+.recovery-row span, .recovery-row small { display: block; }
+.recovery-row span { color: var(--paper); font-size: 13px; }
+.recovery-row small { margin-top: 7px; color: var(--steel); font: 400 10px/1.3 var(--font-space-mono), monospace; letter-spacing: .06em; text-transform: uppercase; }
+.recovery-row button { min-height: 46px; border: 1px solid var(--line); background: var(--paper); color: var(--void); font: 600 11px/1 var(--font-body), sans-serif; cursor: pointer; }
+.recovery-row button:hover:not(:disabled) { background: transparent; color: var(--paper); }
+.recovery-row button:focus-visible { outline: 2px solid var(--paper); outline-offset: 3px; }
+.recovery-row button:disabled { background: #25292c; color: #71777b; cursor: not-allowed; }
+.recovery-state { margin: 18px 0 0; color: var(--steel); font: 400 11px/1.5 var(--font-space-mono), monospace; overflow-wrap: anywhere; }
+
 @media (max-width: 980px) {
   .veil-title { font-size: clamp(68px, 13.2vw, 125px); }
   .veil-lede { position: static; width: min(100%, 580px); margin-top: 44px; }
@@ -411,6 +430,10 @@ button { color: inherit; }
   .operator-line span { display: none; }
   .operator-line { justify-content: flex-end; }
   .single-instrument { padding: 48px 0; }
+  .recovery-desk { padding-bottom: 52px; }
+  .recovery-desk > header { grid-template-columns: 1fr; gap: 20px; padding-top: 42px; }
+  .recovery-row { grid-template-columns: 48px minmax(0, 1fr); gap: 14px; padding: 18px 0; }
+  .recovery-row button { grid-column: 1/-1; width: 100%; }
   .privacy-register > div { grid-template-columns: 1fr; gap: 8px; }
   .auditor-form { grid-template-columns: 1fr; }
   .auditor-form button { grid-column: auto; }

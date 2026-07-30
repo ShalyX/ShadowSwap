@@ -324,6 +324,27 @@ export const executorAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "finalizedAmountIn",
+    stateMutability: "view",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "refundFinalized",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "refundConfidential",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "intentId", type: "uint256" }],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "ConfidentialPulled",
     inputs: [

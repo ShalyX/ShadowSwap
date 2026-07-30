@@ -9,6 +9,7 @@ import { SwapDesk } from "@/components/SwapDesk";
 import { BatchDesk } from "@/components/BatchDesk";
 import { UnwrapDesk } from "@/components/UnwrapDesk";
 import { PrivacyPanel } from "@/components/PrivacyPanel";
+import { RecoveryDesk } from "@/components/RecoveryDesk";
 import deployments from "@/lib/deployments.json";
 
 type Surface = "trade" | "vault" | "compliance";
@@ -75,7 +76,10 @@ export default function TradePage() {
             </div>
           )
         ) : activeTab === "vault" ? (
-          <div className="single-instrument"><UnwrapDesk /></div>
+          <div className="balance-stack">
+            <div className="single-instrument"><UnwrapDesk /></div>
+            <RecoveryDesk />
+          </div>
         ) : (
           <div className="single-instrument"><PrivacyPanel /></div>
         )}
